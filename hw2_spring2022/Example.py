@@ -1,5 +1,5 @@
 import Utility.DBConnector as Connector
-from Utility.ReturnValue import ReturnValue
+from Utility.Status import Status
 from Utility.Exceptions import DatabaseException
 from Utility.DBConnector import ResultSet
 from psycopg2 import sql
@@ -81,7 +81,7 @@ def getUsers(printSchema) -> ResultSet:
         return result
 
 
-def addUser(ID: int, name: str) -> ReturnValue:
+def addUser(ID: int, name: str) -> Status:
     conn = None
     try:
         conn = Connector.DBConnector()
@@ -103,7 +103,7 @@ def addUser(ID: int, name: str) -> ReturnValue:
         print(e)
     finally:
         conn.close()
-        return ReturnValue.OK
+        return Status.OK
 
 
 def deleteUser(ID: int, persistent: bool = True) -> int:
@@ -148,6 +148,7 @@ if __name__ == '__main__':
     print('3. Can reinsert the same row since no commit was done')
     addUser(2, 'Noa')
     print("4. Printing all users")
+    '''
     users = getUsers(printSchema=True)  # will cause printing the users, because printSchema=true in getUsers()
     print('5. Printing user in the second row')
     print(users[1]['id'], users[1]['name'])
@@ -173,4 +174,4 @@ if __name__ == '__main__':
         for col in current_row:  # iterate over the columns
             print(str(col) + "=" + str(current_row[col]))
     print("11. Dropping all tables - empty database")
-    dropTable()
+    dropTable()'''
