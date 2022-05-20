@@ -36,19 +36,20 @@ def createTables():
                           "CHECK (ram_id > 0),"
                           "CHECK (ram_size > 0))")
 
-        ################################################################## TO MODIFY
-        '''conn.execute("CREATE TABLE file_belong_to_disk(ram_id INTEGER NOT NULL PRIMARY KEY,"
-                          "size INTEGER NOT NULL,"
-                          "company TEXT NOT NULL,"
-                          "CHECK (ram_id > 0),"
-                          "CHECK (size > 0))")'''
-        ##################################################################### TO MODIFY
-        '''conn.execute("CREATE TABLE ram_attached_to_disk(file_id INTEGER NOT NULL PRIMARY KEY,"
-                     "disk_id INTEGER NOT NULL"
-                          "size INTEGER NOT NULL,"
-                          "company TEXT NOT NULL,"
-                          "CHECK (ram_id > 0),"
-                          "CHECK (size > 0))")'''
+        conn.execute("CREATE TABLE Files_inside_Disks(file_id INTEGER NOT NULL,"
+                     " disk_id INTEGER NOT NULL,"
+                     " FOREIGN KEY (file_id) REFERENCES Files(file_id) ON DELETE CASCADE,"
+                     " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
+                     " CONSTRAINT pk_FinD PRIMARY KEY (file_id, disk_id))")  # the name of the primary key is FinD
+
+        conn.execute("CREATE TABLE Rams_inside_Disks(ram_id INTEGER NOT NULL,"
+                     " disk_id INTEGER NOT NULL,"
+                     " FOREIGN KEY (ram_id) REFERENCES Rams(ram_id) ON DELETE CASCADE,"
+                     " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
+                     " CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id))")  # the name of the primary key is RinD
+
+        ''' a problem in roads 3 disappears if deleting two new tables!!!!!'''
+
     except DatabaseException.ConnectionInvalid as e:
         return Status.ERROR
 
@@ -442,29 +443,26 @@ def addDiskAndFile(disk: Disk, file: File) -> Status:
     try:
         conn = Connector.DBConnector()
 
-        add_diskNfile_query = sql.SQL("BEGIN TRANSACTION INSERT INTO Disks, Files(disk_id, manufacturing_company, speed, free_space, cost_per_byte),"
-                                 "VALUES({disk_id}, {manufacturing_company}, {speed}, {free_space}, {cost_per_byte}),"
-                                      "INSERT INTO Files(file_id, file_type, size_needed),"
-                                 "VALUES({file_id}, {file_type}, {size_needed})") \
-            .format(disk_id=sql.Literal(disk.getDiskID()), manufacturing_company=sql.Literal(disk.getCompany()), \
-                    speed=sql.Literal(disk.getSpeed()), free_space=sql.Literal(disk.getFreeSpace()), \
-                    cost_per_byte=sql.Literal(disk.getCost()), file_id=sql.Literal(file.getFileID()), \
-                    file_type=sql.Literal(file.getType()), size_needed=sql.Literal(file.getSize()))
+        add_diskNfile_query = sql.SQL("BEGIN;"
+                                      "INSERT INTO Disks(disk_id, manufacturing_company, speed, free_space, cost_per_byte)"
+                                 "VALUES({disk_id}, {manufacturing_company}, {speed}, {free_space}, {cost_per_byte});"
+                                      "INSERT INTO Files(file_id, file_type, size_needed) VALUES({file_id}, {file_type}, {size_needed});"
+                                      "COMMIT;").format(
+                    disk_id=sql.Literal(disk.getDiskID()),
+                    manufacturing_company=sql.Literal(disk.getCompany()),
+                    speed=sql.Literal(disk.getSpeed()),
+                    free_space=sql.Literal(disk.getFreeSpace()),
+                    cost_per_byte=sql.Literal(disk.getCost()),
+                    file_id=sql.Literal(file.getFileID()),
+                    file_type=sql.Literal(file.getType()),
+                    size_needed=sql.Literal(file.getSize()))
         rows_effected, _ = conn.execute(add_diskNfile_query)
     except DatabaseException.ConnectionInvalid:
         conn.close()
         return Status.ERROR
-    except DatabaseException.NOT_NULL_VIOLATION:
-        conn.close()
-        return Status.BAD_PARAMS
     except DatabaseException.UNIQUE_VIOLATION:
         conn.close()
         return Status.ALREADY_EXISTS
-    except DatabaseException.CHECK_VIOLATION:
-        conn.close()
-        return Status.BAD_PARAMS
-    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
-        return Status.BAD_PARAMS
     except DatabaseException.UNKNOWN_ERROR:
         conn.close()
         return Status.ERROR
@@ -478,7 +476,37 @@ def addDiskAndFile(disk: Disk, file: File) -> Status:
 
 
 def addFileToDisk(file: File, diskID: int) -> Status:
-    return Status.OK
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        add_file_to_disk_query = sql.SQL("INSERT INTO Files_inside_Disks(file_id, disk_id) VALUES({file_id}, {disk_id})").format(
+            file_id=sql.Literal(file.getFileID()),
+            disk_id=sql.Literal(diskID))
+        rows_effected, _ = conn.execute(add_file_to_disk_query)
+    except DatabaseException.ConnectionInvalid:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION:
+        conn.close()
+        return Status.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.NOT_EXISTS
+    except DatabaseException.UNKNOWN_ERROR:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
+        return Status.OK
 
 
 def removeFileFromDisk(file: File, diskID: int) -> Status:
@@ -528,6 +556,7 @@ def mostAvailableDisks() -> List[int]:
 def getCloseFiles(fileID: int) -> List[int]:
     return []
 
+
 if __name__ == '__main__':
     dropTables()
     createTables()
@@ -564,5 +593,10 @@ if __name__ == '__main__':
         deleteRAM(1234222)
     if road == 3:
         new_disk0 = Disk(8888, "Foxcon", 200, 2056, 1)
+        print(new_disk0.getCompany())
         new_file0 = File(8888, 'JPEG', 1096)
+        print(new_file0.getType())
         addDiskAndFile(new_disk0, new_file0)
+        # addFileToDisk(new_file0, 8888)
+    if road == 4:
+        print("nothing")
