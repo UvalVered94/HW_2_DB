@@ -31,10 +31,10 @@ def createTables():
                           "CHECK (free_space >= 0))")
 
         conn.execute("CREATE TABLE Rams(ram_id INTEGER NOT NULL PRIMARY KEY,"
-                          "size INTEGER NOT NULL,"
+                          "ram_size INTEGER NOT NULL,"
                           "company TEXT NOT NULL,"
                           "CHECK (ram_id > 0),"
-                          "CHECK (size > 0))")
+                          "CHECK (ram_size > 0))")
 
         ################################################################## TO MODIFY
         '''conn.execute("CREATE TABLE file_belong_to_disk(ram_id INTEGER NOT NULL PRIMARY KEY,"
@@ -329,19 +329,152 @@ def deleteDisk(diskID: int) -> Status:
 
 
 def addRAM(ram: RAM) -> Status:
-    return Status.OK
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        add_ram_query = sql.SQL("INSERT INTO Rams(ram_id, ram_size, company)"
+                                 "VALUES({ram_id}, {ram_size}, {company})") \
+            .format(ram_id=sql.Literal(ram.getRamID()), ram_size=sql.Literal(ram.getSize()), \
+                    company=sql.Literal(ram.getCompany()))
+        rows_effected, _ = conn.execute(add_ram_query)
+    except DatabaseException.ConnectionInvalid as e:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        conn.close()
+        return Status.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION as e:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.BAD_PARAMS
+    except DatabaseException.UNKNOWN_ERROR as e:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
+        return Status.OK
 
 
 def getRAMByID(ramID: int) -> RAM:
-    return RAM()
+    conn = None
+    try:
+        rows_effected, result = 0, ResultSet()
+        conn = Connector.DBConnector()
+        get_ram_query = sql.SQL("SELECT * FROM Rams WHERE ram_id = {id_of_ram}") \
+            .format(id_of_ram=sql.Literal(ramID))
+        rows_effected, result = conn.execute(get_ram_query)
+        # the rows effected var is the number of rows received by the SELECT func
+        if rows_effected != 0:
+            return RAM(result[0]["ram_id"], result[0]["company"], result[0]["ram_size"])
+        else:
+            return RAM.badRAM()
+    except DatabaseException.ConnectionInvalid:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION:
+        conn.close()
+        return Status.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.BAD_PARAMS
+    except DatabaseException.UNKNOWN_ERROR:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
 
 
 def deleteRAM(ramID: int) -> Status:
-    return Status.OK
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        delete_ram_query = sql.SQL("DELETE FROM Rams WHERE ram_id = {id_of_ram}") \
+            .format(id_of_ram=sql.Literal(ramID))
+        rows_effected, _ = conn.execute(delete_ram_query)
+        if rows_effected == 0:
+            return Status.NOT_EXISTS
+
+    except DatabaseException.ConnectionInvalid:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION:
+        conn.close()
+        return Status.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.BAD_PARAMS
+    except DatabaseException.UNKNOWN_ERROR:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
+        return Status.OK
 
 
 def addDiskAndFile(disk: Disk, file: File) -> Status:
-    return Status.OK
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+
+        add_diskNfile_query = sql.SQL("BEGIN TRANSACTION INSERT INTO Disks, Files(disk_id, manufacturing_company, speed, free_space, cost_per_byte),"
+                                 "VALUES({disk_id}, {manufacturing_company}, {speed}, {free_space}, {cost_per_byte}),"
+                                      "INSERT INTO Files(file_id, file_type, size_needed),"
+                                 "VALUES({file_id}, {file_type}, {size_needed})") \
+            .format(disk_id=sql.Literal(disk.getDiskID()), manufacturing_company=sql.Literal(disk.getCompany()), \
+                    speed=sql.Literal(disk.getSpeed()), free_space=sql.Literal(disk.getFreeSpace()), \
+                    cost_per_byte=sql.Literal(disk.getCost()), file_id=sql.Literal(file.getFileID()), \
+                    file_type=sql.Literal(file.getType()), size_needed=sql.Literal(file.getSize()))
+        rows_effected, _ = conn.execute(add_diskNfile_query)
+    except DatabaseException.ConnectionInvalid:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION:
+        conn.close()
+        return Status.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.BAD_PARAMS
+    except DatabaseException.UNKNOWN_ERROR:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
+        return Status.OK
 
 
 def addFileToDisk(file: File, diskID: int) -> Status:
@@ -398,7 +531,7 @@ def getCloseFiles(fileID: int) -> List[int]:
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 1  # put 0 for Files table testing, 1 for Disks, 2 for Rams
+    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -421,5 +554,15 @@ if __name__ == '__main__':
         returned_disk = getDiskByID(201)
         print("returned disk free space is: ", returned_disk.getFreeSpace())
         deleteDisk(201)
-
-
+    if road == 2:
+        new_ram0 = RAM(1234222, "NVIDIA", 4096)
+        new_ram1 = RAM(3433, "Kingstone", 8096)
+        addRAM(new_ram0)
+        addRAM(new_ram1)
+        returned_ram = getRAMByID(3433)
+        print("returned ram size is: ", returned_ram.getSize())
+        deleteRAM(1234222)
+    if road == 3:
+        new_disk0 = Disk(8888, "Foxcon", 200, 2056, 1)
+        new_file0 = File(8888, 'JPEG', 1096)
+        addDiskAndFile(new_disk0, new_file0)

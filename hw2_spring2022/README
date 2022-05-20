@@ -1,6 +1,9 @@
 known bugs:
 1. addFile is not working with more then 10 digits in file ID
-2. addDisk is not working with more then 10 digits in file ID
+2. addDisk is not working with more then 10 digits in disk ID
+3. addRAM is not working with more then 10 digits in ram ID
 
 To complete:
 1. deleteFile deletes only from Files tabel. maybe theres other tables to delete from.
+2. deleteDisk deletes only from Disks tabel. maybe theres other tables to delete from.
+3. deleteRAM deletes only from Rams tabel. maybe theres other tables to delete from.
