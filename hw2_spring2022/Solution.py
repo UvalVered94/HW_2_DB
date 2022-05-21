@@ -47,7 +47,6 @@ def createTables():
                      " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
                      " CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id))")  # the name of the primary key is RinD
 
-        ''' a problem in roads 3 disappears if deleting two new tables!!!!!'''
 
     except DatabaseException.ConnectionInvalid as e:
         return Status.ERROR
@@ -486,15 +485,9 @@ def addFileToDisk(file: File, diskID: int) -> Status:
     except DatabaseException.ConnectionInvalid:
         conn.close()
         return Status.ERROR
-    except DatabaseException.NOT_NULL_VIOLATION:
-        conn.close()
-        return Status.BAD_PARAMS
     except DatabaseException.UNIQUE_VIOLATION:
         conn.close()
         return Status.ALREADY_EXISTS
-    except DatabaseException.CHECK_VIOLATION:
-        conn.close()
-        return Status.BAD_PARAMS
     except DatabaseException.FOREIGN_KEY_VIOLATION as e:
         return Status.NOT_EXISTS
     except DatabaseException.UNKNOWN_ERROR:
@@ -546,15 +539,9 @@ def addRAMToDisk(ramID: int, diskID: int) -> Status:
     except DatabaseException.ConnectionInvalid:
         conn.close()
         return Status.ERROR
-    except DatabaseException.NOT_NULL_VIOLATION:
-        conn.close()
-        return Status.BAD_PARAMS
     except DatabaseException.UNIQUE_VIOLATION:
         conn.close()
         return Status.ALREADY_EXISTS
-    except DatabaseException.CHECK_VIOLATION:
-        conn.close()
-        return Status.BAD_PARAMS
     except DatabaseException.FOREIGN_KEY_VIOLATION as e:
         return Status.NOT_EXISTS
     except DatabaseException.UNKNOWN_ERROR:
@@ -566,8 +553,7 @@ def addRAMToDisk(ramID: int, diskID: int) -> Status:
     finally:
         conn.commit()
         conn.close()
-        return Status.OK
-    return Status.OK
+        return Status.OKK
 
 
 def removeRAMFromDisk(ramID: int, diskID: int) -> Status:
@@ -613,7 +599,7 @@ def getCloseFiles(fileID: int) -> List[int]:
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 4  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -653,5 +639,5 @@ if __name__ == '__main__':
         addFileToDisk(new_file0, 1111)
         removeFileFromDisk(new_file0, 1111)
     if road == 4:
-        new_file0 = File(8888, 'JPEG', 1096)
-        removeFileFromDisk(new_file0, 1111)
+        new_ram0 = RAM(31259, "Samgsung", 16096)
+        addRAMToDisk(new_file0, 1111)
