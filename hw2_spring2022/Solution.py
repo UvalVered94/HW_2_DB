@@ -79,7 +79,7 @@ def clearTables():
     conn = None
     try:
         conn = Connector.DBConnector()
-        tables_to_clear = ["Files", "Disks", "Rams"]
+        tables_to_clear = ["Files", "Disks", "Rams", "Files_inside_Disks", "Rams_inside_Disks"]
         for table in tables_to_clear:
             conn.execute("TRUNCATE TABLE " + table) #  maybe should use DELETE FROM instead of TRUNCATE TABLE
     except Exception as e:
@@ -94,7 +94,7 @@ def dropTables():
     conn = None
     try:
         conn = Connector.DBConnector()
-        tables_to_drop = ["Files", "Disks", "Rams"]
+        tables_to_drop = ["Files", "Disks", "Rams", "Files_inside_Disks", "Rams_inside_Disks"]
         '''views_to_drop = [...]'''
         '''for view in views_to_drop:
             conn.execute("DROP VIEW IF EXISTS " + view " CASCADE")'''
@@ -510,7 +510,29 @@ def addFileToDisk(file: File, diskID: int) -> Status:
 
 
 def removeFileFromDisk(file: File, diskID: int) -> Status:
-    return Status.OK
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        remove_file_from_disk_query = sql.SQL(
+            "DELETE FROM Files_inside_Disks WHERE file_id = {file_id} and disk_id = {disk_id}").format(
+            file_id=sql.Literal(file.getFileID()),
+            disk_id=sql.Literal(diskID))
+        rows_effected, _ = conn.execute(remove_file_from_disk_query)
+    except DatabaseException.ConnectionInvalid:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.NOT_EXISTS
+    except DatabaseException.UNKNOWN_ERROR:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
+        return Status.OK
 
 
 def addRAMToDisk(ramID: int, diskID: int) -> Status:
@@ -592,11 +614,13 @@ if __name__ == '__main__':
         print("returned ram size is: ", returned_ram.getSize())
         deleteRAM(1234222)
     if road == 3:
-        new_disk0 = Disk(8888, "Foxcon", 200, 2056, 1)
+        new_disk0 = Disk(1111, "Foxconn", 200, 2056, 1)
         print(new_disk0.getCompany())
         new_file0 = File(8888, 'JPEG', 1096)
         print(new_file0.getType())
         addDiskAndFile(new_disk0, new_file0)
-        # addFileToDisk(new_file0, 8888)
+        addFileToDisk(new_file0, 1111)
+        removeFileFromDisk(new_file0, 1111)
     if road == 4:
-        print("nothing")
+        new_file0 = File(8888, 'JPEG', 1096)
+        removeFileFromDisk(new_file0, 1111)
