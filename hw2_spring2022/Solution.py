@@ -48,12 +48,12 @@ def createTables():
                      " CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id))")  # the name of the primary key is RinD
 
         conn.execute("CREATE VIEW FilesNDisks_info AS  "
-                     " SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied , COALESCE(COUNT(FD.file_id),0) as num_of_files"
+                     " SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied , COALESCE(COUNT(FiD.file_id),0) as num_of_files"
                      " FROM Files F INNER JOIN Files_inside_Disks FiD"
                      " ON FiD.file_id = F.file_id"
                      " GROUP BY disk_id "
                      " UNION"
-                     " SELECT disk_id, COUNT(NULL), COUNT(NULL) FROM Disks WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")
+                     " SELECT disk_id, 0, 0 FROM Disks WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")
 
     except Exception as e:
         print("WARNING!! ERROR RAISED IN VOID FUNCTION createTables!")
