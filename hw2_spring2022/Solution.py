@@ -8,7 +8,6 @@ from Business.Disk import Disk
 from Utility.DBConnector import ResultSet
 from psycopg2 import sql
 
-# hello soldier
 def createTables():
     conn = None
     try:
@@ -74,6 +73,7 @@ def createTables():
         conn.commit()
         conn.close()  # whatever happens, at the end, ending connection to server
         return Status.OK
+
 
 def clearTables():
     conn = None
@@ -536,6 +536,37 @@ def removeFileFromDisk(file: File, diskID: int) -> Status:
 
 
 def addRAMToDisk(ramID: int, diskID: int) -> Status:
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        add_ram_to_disk_query = sql.SQL("INSERT INTO Rams_inside_Disks(ram_id, disk_id) VALUES({ram_id}, {disk_id})").format(
+            ram_id=sql.Literal(ramID),
+            disk_id=sql.Literal(diskID))
+        rows_effected, _ = conn.execute(add_ram_to_disk_query)
+    except DatabaseException.ConnectionInvalid:
+        conn.close()
+        return Status.ERROR
+    except DatabaseException.NOT_NULL_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.UNIQUE_VIOLATION:
+        conn.close()
+        return Status.ALREADY_EXISTS
+    except DatabaseException.CHECK_VIOLATION:
+        conn.close()
+        return Status.BAD_PARAMS
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        return Status.NOT_EXISTS
+    except DatabaseException.UNKNOWN_ERROR:
+        conn.close()
+        return Status.ERROR
+    except Exception as e:
+        conn.close()
+        return Status.ERROR
+    finally:
+        conn.commit()
+        conn.close()
+        return Status.OK
     return Status.OK
 
 
