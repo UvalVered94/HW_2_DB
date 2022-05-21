@@ -599,7 +599,7 @@ def getCloseFiles(fileID: int) -> List[int]:
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 4  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
