@@ -47,6 +47,13 @@ def createTables():
                      " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
                      " CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id))")  # the name of the primary key is RinD
 
+        conn.execute("CREATE VIEW Disks_Files_data AS  "
+                     " SELECT disk_id, COALESCE(SUM(F.size_in_disk),0) as size_filled , COALESCE(COUNT(FD.file_id),0) as total_files"
+                     " FROM Files F INNER JOIN Files_In_Disks FD"
+                     " ON FD.file_id = F.file_id"
+                     " GROUP BY disk_id "
+                     " UNION"
+                     " SELECT disk_id, 0, 0 FROM Disks WHERE disk_id NOT IN (SELECT disk_id from Files_In_Disks)")
 
     except DatabaseException.ConnectionInvalid as e:
         return Status.ERROR
@@ -510,22 +517,16 @@ def removeFileFromDisk(file: File, diskID: int) -> Status:
             "DELETE FROM Files_inside_Disks WHERE file_id = {file_id} and disk_id = {disk_id}").format(
             file_id=sql.Literal(file.getFileID()),
             disk_id=sql.Literal(diskID))
-        rows_effected, _ = conn.execute(remove_file_from_disk_query)
-    except DatabaseException.ConnectionInvalid:
-        conn.close()
-        return Status.ERROR
-    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
-        return Status.NOT_EXISTS
-    except DatabaseException.UNKNOWN_ERROR:
-        conn.close()
-        return Status.ERROR
+        rows_affected, _ = conn.execute(remove_file_from_disk_query)
     except Exception as e:
-        conn.close()
-        return Status.ERROR
-    finally:
+        print(e)
+        status = Status.ERROR
+    else:
         conn.commit()
+    finally:
         conn.close()
-        return Status.OK
+        return status
+
 
 
 def addRAMToDisk(ramID: int, diskID: int) -> Status:
@@ -535,33 +536,50 @@ def addRAMToDisk(ramID: int, diskID: int) -> Status:
         add_ram_to_disk_query = sql.SQL("INSERT INTO Rams_inside_Disks(ram_id, disk_id) VALUES({ram_id}, {disk_id})").format(
             ram_id=sql.Literal(ramID),
             disk_id=sql.Literal(diskID))
-        rows_effected, _ = conn.execute(add_ram_to_disk_query)
-    except DatabaseException.ConnectionInvalid:
-        conn.close()
-        return Status.ERROR
-    except DatabaseException.UNIQUE_VIOLATION:
-        conn.close()
-        return Status.ALREADY_EXISTS
-    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
-        return Status.NOT_EXISTS
-    except DatabaseException.UNKNOWN_ERROR:
-        conn.close()
-        return Status.ERROR
+        rows_affected, _ = conn.execute(add_ram_to_disk_query)
+        if rows_affected == 0:
+            status = Status.NOT_EXISTS
     except Exception as e:
-        conn.close()
-        return Status.ERROR
-    finally:
+        print(e)
+        status = Status.ERROR
+    else:
         conn.commit()
+    finally:
         conn.close()
-        return Status.OKK
+        return status
 
 
 def removeRAMFromDisk(ramID: int, diskID: int) -> Status:
-    return Status.OK
+    conn = None
+    status = Status.OK
+    try:
+        conn = Connector.DBConnector()
+        query_string = "DELETE FROM Rams_inside_Disks WHERE ram_id = " + str(ramID) + " and disk_id = " + str(diskID)
+        remove_ram_from_disk_query = sql.SQL(query_string)
+        rows_affected, _ = conn.execute(remove_ram_from_disk_query)
+        if rows_affected == 0:
+            status = Status.NOT_EXISTS
+    except Exception as e:
+        print(e)
+        status = Status.ERROR
+    else:
+        conn.commit()
+    finally:
+        conn.close()
+        return status
 
 
 def averageFileSizeOnDisk(diskID: int) -> float:
-    return 0
+    conn = None
+    status = Status.OK
+    try:
+        conn = Connector.DBConnector()
+        query_string = "SELECT AVG(size_needed) FROM Files WHERE file_id = (SELECT file_id FROM Files_inside_Disks WHERE disk_id = " \
+                       + str(diskID)
+        remove_ram_from_disk_query = sql.SQL(query_string)
+        rows_affected, _ = conn.execute(remove_ram_from_disk_query)
+        if rows_affected == 0:
+            status = Status.NOT_EXISTS
 
 
 def diskTotalRAM(diskID: int) -> int:
@@ -599,7 +617,7 @@ def getCloseFiles(fileID: int) -> List[int]:
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 4  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -639,5 +657,12 @@ if __name__ == '__main__':
         addFileToDisk(new_file0, 1111)
         removeFileFromDisk(new_file0, 1111)
     if road == 4:
-        new_ram0 = RAM(31259, "Samgsung", 16096)
-        addRAMToDisk(new_file0, 1111)
+        new_ram0 = RAM(31259, "Samsung", 16096)
+        addRAM(new_ram0)
+        new_disk0 = Disk(1111, "Foxconn", 200, 2056, 1)
+        addDisk(new_disk0)
+        addRAMToDisk(3159, 1111)
+        print("before remove")
+        removeRAMFromDisk(5656, 1111)
+        print("after remove")
+
