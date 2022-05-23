@@ -47,14 +47,34 @@ def createTables():
                      " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
                      " CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id))")  # the name of the primary key is RinD
 
-        conn.execute("CREATE VIEW FilesNDisks_info AS  "
+        '''conn.execute("CREATE VIEW FilesNDisks_info AS  "
                      " SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied , COALESCE(COUNT(FiD.file_id),0) as num_of_files"
                      " FROM Files F INNER JOIN Files_inside_Disks FiD"
                      " ON FiD.file_id = F.file_id"
                      " GROUP BY disk_id "
                      " UNION"
-                     " SELECT disk_id, 0, 0 FROM Disks WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")
+                     " SELECT disk_id, 0, 0 FROM Disks WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")'''
 
+        conn.execute("CREATE VIEW FilesNDisks_info AS  "
+                     " SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied, (SELECT COALESCE(SUM(free_space),0) FROM Disks WHERE disk_id = FiD.disk_id GROUP BY disk_id) - (COALESCE(SUM(F.size_needed),0)) as free_space, COALESCE(COUNT(FiD.file_id),0) as num_of_files"
+                     " FROM Files F INNER JOIN Files_inside_Disks FiD"
+                     " ON FiD.file_id = F.file_id"
+                     " GROUP BY disk_id "
+                     " UNION"
+                     " SELECT disk_id, 0, D.free_space, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")
+
+        conn.execute("CREATE VIEW DisksNRams_info AS  "
+                     " SELECT disk_id, COALESCE (SUM(ram_size),0) as entire_disk_ram"
+                     " FROM RAMS R INNER JOIN Rams_inside_Disks RiD"
+                     " ON R.ram_id = RiD.ram_id"
+                     " GROUP BY disk_id "
+                     " UNION"
+                     " SELECT disk_id, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Rams_inside_Disks)")
+
+        '''conn.execute("CREATE VIEW Disks_Space_Left AS  "
+                     " SELECT D.disk_id, ((SELECT D.free_space FROM Disks WHERE disk_id = D.disk_id) - COALESCE(FNDi.size_filled, 0)) as space_left"
+                     " FROM Disks D INNER JOIN FilesNDisks_info FNDi"
+                     " ON D.disk_id = FNDi.disk_id")'''
     except Exception as e:
         print("WARNING!! ERROR RAISED IN VOID FUNCTION createTables!")
         print(e)
@@ -555,7 +575,7 @@ def getCloseFiles(fileID: int) -> List[int]:
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 5  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -587,13 +607,28 @@ if __name__ == '__main__':
         print("returned ram size is: ", returned_ram.getSize())
         deleteRAM(1234222)
     if road == 3:
-        new_disk0 = Disk(1111, "Foxconn", 200, 2056, 1)
+        new_disk0 = Disk(1111, "Foxconn", 200, 2000, 1)
+        new_disk1 = Disk(2222, "WD", 350, 5500, 10)
+        new_disk2 = Disk(3333, "Kingstone", 350, 6000, 10)
         print(new_disk0.getCompany())
-        new_file0 = File(8888, 'JPEG', 1096)
+        new_file0 = File(8888, 'JPEG', 1500)
+        new_file1 = File(9999, 'JPEG', 250)
+        new_file2 = File(6666, 'PNG', 500)
+        new_file3 = File(7777, 'XLC', 500)
+        new_file4 = File(5555, 'SML', 500)
         print(new_file0.getType())
         addDiskAndFile(new_disk0, new_file0)
+        addDiskAndFile(new_disk1, new_file2)
+        addDisk(new_disk2)
+        addFile(new_file1)
+        addFile(new_file3)
+        addFile(new_file4)
         addFileToDisk(new_file0, 1111)
-        removeFileFromDisk(new_file0, 1111)
+        addFileToDisk(new_file1, 1111)
+        addFileToDisk(new_file2, 2222)
+        addFileToDisk(new_file3, 2222)
+        addFileToDisk(new_file4, 2222)
+        # removeFileFromDisk(new_file0, 1111)
     if road == 4:
         new_ram0 = RAM(31259, "Samsung", 16096)
         addRAM(new_ram0)
