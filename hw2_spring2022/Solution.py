@@ -13,13 +13,12 @@ def createTables():
     try:
         conn = Connector.DBConnector()
 
-        conn.execute("CREATE TABLE Files(file_id INTEGER NOT NULL PRIMARY KEY,"
+        conn.execute("BEGIN; CREATE TABLE Files(file_id INTEGER NOT NULL PRIMARY KEY,"
                           "file_type TEXT NOT NULL,"
                           "size_needed INTEGER NOT NULL,"
                           "CHECK (file_id > 0),"
-                          "CHECK (size_needed >= 0))")
-
-        conn.execute("CREATE TABLE Disks(disk_id INTEGER NOT NULL PRIMARY KEY,"
+                          "CHECK (size_needed >= 0));"
+                     "CREATE TABLE Disks(disk_id INTEGER NOT NULL PRIMARY KEY,"
                           "manufacturing_company TEXT NOT NULL,"
                           "speed INTEGER NOT NULL,"
                           "free_space INTEGER NOT NULL,"
@@ -27,54 +26,38 @@ def createTables():
                           "CHECK (disk_id > 0),"
                           "CHECK (speed > 0),"
                           "CHECK (cost_per_byte > 0),"
-                          "CHECK (free_space >= 0))")
-
-        conn.execute("CREATE TABLE Rams(ram_id INTEGER NOT NULL PRIMARY KEY,"
+                          "CHECK (free_space >= 0));"
+                     "CREATE TABLE Rams(ram_id INTEGER NOT NULL PRIMARY KEY,"
                           "ram_size INTEGER NOT NULL,"
                           "company TEXT NOT NULL,"
                           "CHECK (ram_id > 0),"
-                          "CHECK (ram_size > 0))")
+                          "CHECK (ram_size > 0));"
+                     "CREATE TABLE Files_inside_Disks(file_id INTEGER NOT NULL,"
+                         "disk_id INTEGER NOT NULL,"
+                         "FOREIGN KEY (file_id) REFERENCES Files(file_id) ON DELETE CASCADE,"
+                         "FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
+                         "CONSTRAINT pk_FinD PRIMARY KEY (file_id, disk_id));"  # the name of the primary key is FinD
+                    "CREATE TABLE Rams_inside_Disks(ram_id INTEGER NOT NULL,"
+                         "disk_id INTEGER NOT NULL,"
+                         "FOREIGN KEY (ram_id) REFERENCES Rams(ram_id) ON DELETE CASCADE,"
+                         "FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
+                         "CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id));"  # the name of the primary key is RinD
+                    "CREATE VIEW DisksNRams_info AS  "
+                         "SELECT disk_id, COALESCE (SUM(ram_size),0) as entire_disk_ram"
+                         " FROM RAMS R INNER JOIN Rams_inside_Disks RiD"
+                         " ON R.ram_id = RiD.ram_id"
+                         " GROUP BY disk_id "
+                         " UNION"
+                         " SELECT disk_id, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Rams_inside_Disks);"
+                    "CREATE VIEW FilesNDisks_info AS  "
+                         "SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied, (SELECT COALESCE(SUM(free_space),0) FROM Disks WHERE disk_id = FiD.disk_id GROUP BY disk_id) - (COALESCE(SUM(F.size_needed),0)) as free_space, COALESCE(COUNT(FiD.file_id),0) as num_of_files"
+                         " FROM Files F INNER JOIN Files_inside_Disks FiD"
+                         " ON FiD.file_id = F.file_id"
+                         " GROUP BY disk_id "
+                         " UNION"
+                         " SELECT disk_id, 0, D.free_space, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks);"
+                     "COMMIT;")
 
-        conn.execute("CREATE TABLE Files_inside_Disks(file_id INTEGER NOT NULL,"
-                     " disk_id INTEGER NOT NULL,"
-                     " FOREIGN KEY (file_id) REFERENCES Files(file_id) ON DELETE CASCADE,"
-                     " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
-                     " CONSTRAINT pk_FinD PRIMARY KEY (file_id, disk_id))")  # the name of the primary key is FinD
-
-        conn.execute("CREATE TABLE Rams_inside_Disks(ram_id INTEGER NOT NULL,"
-                     " disk_id INTEGER NOT NULL,"
-                     " FOREIGN KEY (ram_id) REFERENCES Rams(ram_id) ON DELETE CASCADE,"
-                     " FOREIGN KEY (disk_id) REFERENCES Disks(disk_id) ON DELETE CASCADE,"
-                     " CONSTRAINT pk_RinD PRIMARY KEY (ram_id, disk_id))")  # the name of the primary key is RinD
-
-        '''conn.execute("CREATE VIEW FilesNDisks_info AS  "
-                     " SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied , COALESCE(COUNT(FiD.file_id),0) as num_of_files"
-                     " FROM Files F INNER JOIN Files_inside_Disks FiD"
-                     " ON FiD.file_id = F.file_id"
-                     " GROUP BY disk_id "
-                     " UNION"
-                     " SELECT disk_id, 0, 0 FROM Disks WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")'''
-
-        conn.execute("CREATE VIEW FilesNDisks_info AS  "
-                     " SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied, (SELECT COALESCE(SUM(free_space),0) FROM Disks WHERE disk_id = FiD.disk_id GROUP BY disk_id) - (COALESCE(SUM(F.size_needed),0)) as free_space, COALESCE(COUNT(FiD.file_id),0) as num_of_files"
-                     " FROM Files F INNER JOIN Files_inside_Disks FiD"
-                     " ON FiD.file_id = F.file_id"
-                     " GROUP BY disk_id "
-                     " UNION"
-                     " SELECT disk_id, 0, D.free_space, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Files_inside_Disks)")
-
-        conn.execute("CREATE VIEW DisksNRams_info AS  "
-                     " SELECT disk_id, COALESCE (SUM(ram_size),0) as entire_disk_ram"
-                     " FROM RAMS R INNER JOIN Rams_inside_Disks RiD"
-                     " ON R.ram_id = RiD.ram_id"
-                     " GROUP BY disk_id "
-                     " UNION"
-                     " SELECT disk_id, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Rams_inside_Disks)")
-
-        '''conn.execute("CREATE VIEW Disks_Space_Left AS  "
-                     " SELECT D.disk_id, ((SELECT D.free_space FROM Disks WHERE disk_id = D.disk_id) - COALESCE(FNDi.size_filled, 0)) as space_left"
-                     " FROM Disks D INNER JOIN FilesNDisks_info FNDi"
-                     " ON D.disk_id = FNDi.disk_id")'''
     except Exception as e:
         print("WARNING!! ERROR RAISED IN VOID FUNCTION createTables!")
         print(e)
