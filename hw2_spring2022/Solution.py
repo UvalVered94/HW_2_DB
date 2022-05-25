@@ -1,3 +1,4 @@
+from decimal import DivisionByZero
 from msilib.schema import RemoveFile
 from typing import List
 import Utility.DBConnector as Connector
@@ -8,6 +9,9 @@ from Business.RAM import RAM
 from Business.Disk import Disk
 from Utility.DBConnector import ResultSet
 from psycopg2 import sql
+from psycopg2.errors import DivisionByZero
+
+from hw2_spring2022.Utility.DBConnector import DBConnector
 
 def createTables():
     conn = None
@@ -504,15 +508,12 @@ def averageFileSizeOnDisk(diskID: int) -> float:
         average_query = sql.SQL("SELECT COALESCE((V.size_occupied / V.num_of_files),0) avg, V.num_of_files as nof FROM FilesNDisks_info V WHERE V.disk_id = {disk_id}").format(
             disk_id=sql.Literal(diskID))
         rows_affected, result = conn.execute(average_query)
-        if rows_affected == 0: # No disk with this ID
-            avg_result = 0
-        else:
+        if rows_affected != 0: # No disk with this ID
             avg_result = result[0]["avg"]
-    except Exception as e:  # other errors
-        if type(e).__name__ == "DivisionByZero":  # divide by zero should return 0
-            return 0
-        else:
-            avg_result = -1  # other exception return -1
+    except DivisionByZero as e:
+        avg_result = 0
+    except Exception as e:
+        avg_result = -1
     else:
         conn.commit()
     finally:
@@ -546,20 +547,20 @@ def getCostForType(type: str) -> int:
     conn = None
     try:
         conn = Connector.DBConnector()
-        cost_for_type_query = sql.SQL("SELECT SUM(FND.size_needed)*D.cost_per_byte AS price_to_disk \
-        FROM (\
-            (Files F INNER JOIN Files_inside_Disks FD ON F.file_id = FD.file_id) FND \
-            INNER JOIN Disks D ON FND.disk_id = D.disk_id \
-            ) \
-        WHERE FND.file_type = {file_type} \
-        GROUP BY D.disk_id, D.cost_per_byte".format(file_type=sql.Literal(type)))
-        
+        cost_for_type_query = sql.SQL("SELECT COALESCE(SUM(price_to_disk), 0) AS cost_per_disk FROM \
+        ( \
+            SELECT SUM(FND.size_needed)*D.cost_per_byte AS price_to_disk \
+            FROM (\
+                ((SELECT * FROM Files WHERE file_type = {file_type}) F \
+                INNER JOIN Files_inside_Disks FD ON F.file_id = FD.file_id) FND \
+                INNER JOIN Disks D ON FND.disk_id = D.disk_id \
+                ) \
+            GROUP BY D.disk_id, D.cost_per_byte \
+        ) SUMS_VECTOR").format(file_type=sql.Literal(type))
         rows_affected, query_result = conn.execute(cost_for_type_query)
-        print(query_result)
-        #if rows_affected == 1: # should have 1 result as it's a scalar function
-        #    cost_result = query_result[0]["cost_per_disk"]
+        if rows_affected == 1: # should ALWAYS be 1 because of the coalesce
+            cost_result = query_result[0]["cost_per_disk"]
     except Exception as e:
-        print(e)
         cost_result = -1
     else:
         conn.commit()
@@ -576,15 +577,14 @@ def getFilesCanBeAddedToDisk(diskID: int) -> List[int]:
     rows_affected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        can_add_query = sql.SQL("SELECT file_id FROM Files F WHERE size_needed <= (SELECT free_space FROM FilesNDisks_info"
-         "WHERE disk_id = {disk_id})"
-         "ORDER BY file_id" 
+        can_add_query = sql.SQL("SELECT file_id FROM Files F WHERE size_needed <= (SELECT free_space FROM FilesNDisks_info "
+         "WHERE disk_id = {disk_id}) "
+         "ORDER BY file_id " 
          "ASC LIMIT 5").format(disk_id=sql.Literal(diskID))
         rows_affected, result = conn.execute(can_add_query)
         if rows_affected != 0: # the list should not be empty
-            print("Im here")
-            for file in enumerate(result):
-                answer.append(file)
+            for file in range(rows_affected):
+                answer.append(result[file]["file_id"])
     except Exception as e:
         print(e)
         pass    
@@ -597,19 +597,104 @@ def getFilesCanBeAddedToDisk(diskID: int) -> List[int]:
 
 
 def getFilesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
-    return []
+    conn = None
+    answer = []
+    rows_affected, result = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        can_add_query = sql.SQL("SELECT file_id FROM Files F WHERE size_needed <= (SELECT free_space FROM FilesNDisks_info "
+         "WHERE disk_id = {disk_id}) and size_needed <= (SELECT entire_disk_ram FROM DisksNRams_info "
+         "WHERE disk_id = {disk_id})"
+         "ORDER BY file_id " 
+         "ASC LIMIT 5").format(disk_id=sql.Literal(diskID))
+        rows_affected, result = conn.execute(can_add_query)
+        if rows_affected != 0: # the list should not be empty
+            for file in range(rows_affected):
+                answer.append(result[file]["file_id"])
+    except Exception as e:
+        print(e)
+        pass    
+    else:
+        conn.commit()
+    finally:
+        if conn is not None:
+            conn.close()
+        return answer
 
 
 def isCompanyExclusive(diskID: int) -> bool:
-    return True
+    result = False
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        exclusive_query = sql.SQL("\
+        SELECT ram_result FROM \
+        ( \
+            SELECT COALESCE(COUNT(disk_id), 0) AS ram_result FROM DisksNRams_info \
+            WHERE \
+                disk_id = {disk_id} and \
+                entire_disk_ram = (SELECT SUM(ram_size) FROM Rams WHERE company = (SELECT manufacturing_company FROM Disks WHERE disk_id = {disk_id})) \
+        ) RAM_RESULT").format(disk_id=sql.Literal(diskID))
+        rows_affected, query_result = conn.execute(exclusive_query)
+        if rows_affected != 0:
+            if int(query_result[0]["ram_result"]) == 1:
+                result = True
+    except Exception as e:
+        pass
+    else:
+        conn.commit()
+    finally:
+        if conn is not None:
+            conn.close()
+        return result
 
 
 def getConflictingDisks() -> List[int]:
-    return []
-
-
+    conn = None
+    answer =[]
+    rows_affected, result = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        conflict_query = sql.SQL("SELECT disk_id FROM Files_inside_Disks WHERE disk_id IN COUNT(disk_id) > 1 GROUP BY file_id ")
+        rows_affected, result = conn.execute(conflict_query)
+        print(result)
+        # for index, disk in enumerate(result):
+        #     answer.append(disk)
+    except Exception as e:
+        print(e)
+    else:
+        conn.commit()
+    finally:
+        if conn is not None:
+            conn.close()
+        return answer
+    
+    
 def mostAvailableDisks() -> List[int]:
-    return []
+    """
+    create a view of FILES INNER JOIN FILES IN DISKS INNER JOIN DISKS
+    REMOVE THE SUB QUERY FROM GetCostForType
+    and implement the view in the 2 queries
+    """
+    conn = None
+    result = []
+    try:
+        conn = Connector.DBConnector()
+        most_disks_query = sql.SQL("\
+        SELECT disk_id FROM Disks \
+        ORDER BY ---- DESC \
+        ORDER BY ---- DESC \
+        ORDER BY ---- ASC \
+        LIMIT 5 \
+        ")
+        rows_affected, query_result = conn.execute(most_disks_query)
+    except:
+        pass
+    else:
+        conn.commit()
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def getCloseFiles(fileID: int) -> List[int]:
@@ -627,13 +712,27 @@ def try_get_cost():
     addDisk(new_disk1)
     addFileToDisk(new_file0, 1)
     addFileToDisk(new_file0, 2)
-    print(getCostForType("JPEG"))
+    print(getCostForType("PNG"))
 
+def test_exclusive_disk():
+    print("hello")
+    new_disk0 = Disk(78, "samsung", 200, 2056, 2)
+    addDisk(new_disk0)
+    new_ram1 = RAM(10, "samsung", 1024)
+    new_ram2 = RAM(20, "samsung", 1024)
+    new_ram3 = RAM(30, "samsung", 1024)
+    addRAM(new_ram1)
+    addRAM(new_ram2)
+    addRAM(new_ram3)
+    addRAMToDisk(10, 78)
+    addRAMToDisk(20, 78)
+    addRAMToDisk(30, 78)
+    print(isCompanyExclusive(78))
 
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 6  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -665,7 +764,7 @@ if __name__ == '__main__':
         print("returned ram size is: ", returned_ram.getSize())
         deleteRAM(1234222)
     if road == 3:
-        new_disk0 = Disk(1111, "Foxconn", 200, 2000, 1)
+        new_disk0 = Disk(1111, "Foxconn", 200, 1000, 1)
         new_disk1 = Disk(2222, "WD", 350, 5500, 10)
         new_disk2 = Disk(3333, "Kingstone", 350, 6000, 10)
         new_disk3 = Disk(4444, "Apple", 350, 1400, 10)
@@ -676,6 +775,9 @@ if __name__ == '__main__':
         new_file3 = File(7777, 'XLC', 500)
         new_file4 = File(5555, 'SML', 500)
         new_file5 = File(1111, 'SML', 7000)
+        new_ram0 = RAM(1234, 'WAISMAN', 1000)
+        new_ram1 = RAM(2345, 'WAISMAN', 1000)
+        new_ram2 = RAM(3456, 'WAISMAN', 1000)
         print(new_file0.getType())
         addDiskAndFile(new_disk0, new_file0)
         addDiskAndFile(new_disk1, new_file2)
@@ -687,13 +789,17 @@ if __name__ == '__main__':
         addFile(new_file5)
         addFileToDisk(new_file0, 1111)
         addFileToDisk(new_file1, 1111)
+        addFileToDisk(new_file1, 2222)
         addFileToDisk(new_file2, 2222)
         addFileToDisk(new_file3, 2222)
         addFileToDisk(new_file4, 2222)
-        status = addFileToDisk(new_file5, 3333)
-        print(averageFileSizeOnDisk(8899))
-        print(getFilesCanBeAddedToDisk(2222))
-        # removeFileFromDisk(new_file0, 1111)
+        addRAM(new_ram0)
+        addRAM(new_ram1)
+        addRAM(new_ram2)
+        addRAMToDisk(1234,1111)
+        addRAMToDisk(2345,1111)
+        addRAMToDisk(3456,1111)
+        getConflictingDisks()
     if road == 4:
         new_ram0 = RAM(31259, "Samsung", 16096)
         addRAM(new_ram0)
@@ -707,3 +813,5 @@ if __name__ == '__main__':
         print("Im game")
     if road == 6:
         try_get_cost()
+    if road == 7:
+        test_exclusive_disk()
