@@ -570,7 +570,6 @@ def getCostForType(type: str) -> int:
         return cost_result
 
 
-
 def getFilesCanBeAddedToDisk(diskID: int) -> List[int]:
     conn = None
     answer = []
@@ -621,7 +620,7 @@ def getFilesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
             conn.close()
         return answer
 
-
+# TODO: check what happens if there is no such disk, if disk is empty
 def isCompanyExclusive(diskID: int) -> bool:
     result = False
     conn = None
@@ -655,11 +654,11 @@ def getConflictingDisks() -> List[int]:
     rows_affected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        conflict_query = sql.SQL("SELECT disk_id FROM Files_inside_Disks WHERE disk_id IN COUNT(disk_id) > 1 GROUP BY file_id ")
+        
+        conflict_query = sql.SQL("SELECT FiD.disk_id FROM Files_inside_Disks as FiD WHERE (SELECT COUNT(FD.disk_id) FROM Files_inside_Disks as FD WHERE FD.file_id = FiD.file_id) > 1 ORDER BY FiD.disk_id")
         rows_affected, result = conn.execute(conflict_query)
-        print(result)
-        # for index, disk in enumerate(result):
-        #     answer.append(disk)
+        for disk in range(rows_affected):
+            answer.append(result[disk]["disk_id"])
     except Exception as e:
         print(e)
     else:
@@ -671,48 +670,85 @@ def getConflictingDisks() -> List[int]:
     
     
 def mostAvailableDisks() -> List[int]:
-    """
-    create a view of FILES INNER JOIN FILES IN DISKS INNER JOIN DISKS
-    REMOVE THE SUB QUERY FROM GetCostForType
-    and implement the view in the 2 queries
-    """
     conn = None
     result = []
     try:
         conn = Connector.DBConnector()
         most_disks_query = sql.SQL("\
-        SELECT disk_id FROM Disks \
-        ORDER BY ---- DESC \
-        ORDER BY ---- DESC \
-        ORDER BY ---- ASC \
+        SELECT FFND.disk_id AS disk_id, Disks.speed AS disk_speed, COUNT(FFND.disk_id) AS files_possible FROM \
+        (SELECT disk_id FROM Files CROSS JOIN FilesNDisks_info WHERE Files.size_needed <= FilesNDisks_info.free_space) FFND INNER JOIN Disks ON FFND.disk_id = Disks.disk_id \
+        GROUP BY FFND.disk_id, Disks.speed \
+        ORDER BY files_possible DESC, disk_speed DESC, disk_id ASC \
         LIMIT 5 \
         ")
         rows_affected, query_result = conn.execute(most_disks_query)
-    except:
-        pass
+        if rows_affected!= 0:
+            for index in range(rows_affected):
+                result.append(query_result[index]["disk_id"])
+    except Exception as e:
+        pass # nothing to do if there is an error, return an empty result
     else:
         conn.commit()
     finally:
         if conn is not None:
             conn.close()
+        return result
 
 
 def getCloseFiles(fileID: int) -> List[int]:
-    return []
+    conn = None
+    answer =[]
+    rows_affected, result = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        
+        '''conflict_query = sql.SQL("SELECT F.file_id " 
+        "FROM Files F " 
+        "WHERE (SELECT COUNT(FD.file_id) FROM Files_inside_Disks FD WHERE FD.file_id = F.file_id )"
+        ">= 0.5*((SELECT COUNT(FFD.file_id) FROM Files_inside_Disks FFD WHERE FFD.file_id = {file_id})) "
+        "and F.file_id <> {file_id}"
+        "ORDER BY file_id ASC LIMIT 10").format(file_id=sql.Literal(fileID))'''
+        conflict_query = sql.SQL("SELECT F.file_id " 
+        "FROM Files F " 
+        "WHERE (SELECT COUNT(disk_id) FROM ((SELECT FD.disk_id FROM Files_inside_Disks FD WHERE FD.file_id = F.file_id) KS "
+        "INNER JOIN (SELECT FFD.disk_id FROM Files_inside_Disks FFD WHERE FFD.file_id = {file_id}) IJ) "
+        ">= 0.5*((SELECT COUNT(FFDD.file_id) FROM Files_inside_Disks FFDD WHERE FFD.file_id = {file_id}))) "
+        "and F.file_id <> {file_id}"
+        "ORDER BY file_id ASC LIMIT 10").format(file_id=sql.Literal(fileID))
+        rows_affected, result = conn.execute(conflict_query)
+        for file in range(rows_affected):
+            answer.append(result[file]["file_id"])
+    except Exception as e:
+        print(e)
+    else:
+        conn.commit()
+    finally:
+        if conn is not None:
+            conn.close()
+        return answer
 
 
 
 
 def try_get_cost():
-    new_file0 = File(1, 'JPEG', 1000)
-    new_disk0 = Disk(1, "Foxcon", 200, 2056, 2)
-    new_disk1 = Disk(2, "fox", 100, 3000, 30)
-    addFile(new_file0)
+    new_disk0 = Disk(3, "Foxcon", 50, 3, 1)
+    new_disk1 = Disk(1, "Foxcon", 100, 2, 1)
+    new_disk2 = Disk(10, "Foxcon", 500, 1, 1)
+    new_disk3 = Disk(7, "Foxcon", 300, 1, 1)
+    new_disk4 = Disk(8, "Foxcon", 300, 1, 1)
     addDisk(new_disk0)
     addDisk(new_disk1)
-    addFileToDisk(new_file0, 1)
-    addFileToDisk(new_file0, 2)
-    print(getCostForType("PNG"))
+    addDisk(new_disk2)
+    addDisk(new_disk3)
+    addDisk(new_disk4)
+    for i in range(5):
+        new_file0 = File(1 + i, 'JPEG', 1)
+        addFile(new_file0)
+    new_file1 = File(7, 'JPEG', 2)
+    addFile(new_file1)
+    new_file2 = File(8, 'JPEG', 3)
+    addFile(new_file2)
+    mostAvailableDisks()
 
 def test_exclusive_disk():
     print("hello")
@@ -732,7 +768,7 @@ def test_exclusive_disk():
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 3  # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 3 # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -764,21 +800,19 @@ if __name__ == '__main__':
         print("returned ram size is: ", returned_ram.getSize())
         deleteRAM(1234222)
     if road == 3:
-        new_disk0 = Disk(1111, "Foxconn", 200, 1000, 1)
-        new_disk1 = Disk(2222, "WD", 350, 5500, 10)
-        new_disk2 = Disk(3333, "Kingstone", 350, 6000, 10)
-        new_disk3 = Disk(4444, "Apple", 350, 1400, 10)
-        print(new_disk0.getCompany())
-        new_file0 = File(8888, 'JPEG', 1500)
-        new_file1 = File(9999, 'JPEG', 250)
-        new_file2 = File(6666, 'PNG', 500)
-        new_file3 = File(7777, 'XLC', 500)
-        new_file4 = File(5555, 'SML', 500)
-        new_file5 = File(1111, 'SML', 7000)
+        new_disk0 = Disk(0000, "Foxconn", 200, 1000, 1)
+        new_disk1 = Disk(1111, "WD", 350, 5500, 10)
+        new_disk2 = Disk(2222, "Kingstone", 350, 6000, 10)
+        new_disk3 = Disk(3333, "Apple", 350, 1400, 10)
+        new_file0 = File(000, 'JPEG', 1)
+        new_file1 = File(111, 'JPEG', 1)
+        new_file2 = File(222, 'PNG', 1)
+        new_file3 = File(333, 'XLC', 1)
+        new_file4 = File(444, 'SML', 1)
+        new_file5 = File(555, 'SML', 1)
         new_ram0 = RAM(1234, 'WAISMAN', 1000)
         new_ram1 = RAM(2345, 'WAISMAN', 1000)
         new_ram2 = RAM(3456, 'WAISMAN', 1000)
-        print(new_file0.getType())
         addDiskAndFile(new_disk0, new_file0)
         addDiskAndFile(new_disk1, new_file2)
         addDisk(new_disk2)
@@ -787,19 +821,17 @@ if __name__ == '__main__':
         addFile(new_file3)
         addFile(new_file4)
         addFile(new_file5)
+        addFileToDisk(new_file0, 0000)
         addFileToDisk(new_file0, 1111)
+        addFileToDisk(new_file0, 2222)
+        addFileToDisk(new_file0, 3333)
+        addFileToDisk(new_file1, 0000)
         addFileToDisk(new_file1, 1111)
         addFileToDisk(new_file1, 2222)
-        addFileToDisk(new_file2, 2222)
-        addFileToDisk(new_file3, 2222)
-        addFileToDisk(new_file4, 2222)
-        addRAM(new_ram0)
-        addRAM(new_ram1)
-        addRAM(new_ram2)
-        addRAMToDisk(1234,1111)
-        addRAMToDisk(2345,1111)
-        addRAMToDisk(3456,1111)
-        getConflictingDisks()
+        addFileToDisk(new_file2, 0000)
+        addFileToDisk(new_file2, 1111)
+        addFileToDisk(new_file3, 3333)
+        print(getCloseFiles(000))
     if road == 4:
         new_ram0 = RAM(31259, "Samsung", 16096)
         addRAM(new_ram0)
