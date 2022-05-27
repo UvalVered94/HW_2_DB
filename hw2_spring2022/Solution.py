@@ -695,26 +695,22 @@ def mostAvailableDisks() -> List[int]:
         return result
 
 
-def getCloseFiles(fileID: int) -> List[int]:
+'''def getCloseFiles(fileID: int) -> List[int]:
     conn = None
     answer =[]
     rows_affected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        
-        '''conflict_query = sql.SQL("SELECT F.file_id " 
-        "FROM Files F " 
-        "WHERE (SELECT COUNT(FD.file_id) FROM Files_inside_Disks FD WHERE FD.file_id = F.file_id )"
-        ">= 0.5*((SELECT COUNT(FFD.file_id) FROM Files_inside_Disks FFD WHERE FFD.file_id = {file_id})) "
-        "and F.file_id <> {file_id}"
-        "ORDER BY file_id ASC LIMIT 10").format(file_id=sql.Literal(fileID))'''
-        conflict_query = sql.SQL("SELECT F.file_id " 
-        "FROM Files F " 
-        "WHERE (SELECT COUNT(disk_id) FROM ((SELECT FD.disk_id FROM Files_inside_Disks FD WHERE FD.file_id = F.file_id) KS "
-        "INNER JOIN (SELECT FFD.disk_id FROM Files_inside_Disks FFD WHERE FFD.file_id = {file_id}) IJ) "
-        ">= 0.5*((SELECT COUNT(FFDD.file_id) FROM Files_inside_Disks FFDD WHERE FFD.file_id = {file_id}))) "
-        "and F.file_id <> {file_id}"
-        "ORDER BY file_id ASC LIMIT 10").format(file_id=sql.Literal(fileID))
+        num_of_intersections = "SELECT COUNT(INTER.disk_id) FROM "\
+            "(SELECT F1.disk_id FROM Files_inside_Disks F1 WHERE F1.file_id = {file_id}" \
+            "INTERSECT SELECT F2.disk_id FROM Files_inside_Disks F2 WHERE F2.file_id = F.file_id " \
+             ") INTER"
+        num_of_disks = "SELECT COUNT(F3.disk_id) " \
+                       "FROM Files_inside_Disks F3 " \
+                       "WHERE F3.file_id = {file_id}) AND NOT (F.file_id={file_id}) " \
+                       "GROUP BY F.file_id"
+        conflict_query = sql.SQL("SELECT F.file_id FROM Files F WHERE (" + num_of_intersections + ") >= 0.5*  \
+        (" + num_of_disks).format(file_id=sql.Literal(fileID))
         rows_affected, result = conn.execute(conflict_query)
         for file in range(rows_affected):
             answer.append(result[file]["file_id"])
@@ -726,7 +722,31 @@ def getCloseFiles(fileID: int) -> List[int]:
         if conn is not None:
             conn.close()
         return answer
+'''
+def getCloseFiles(fileID: int) -> List[int]:
+    conn = None
+    try:
+        conn = Connector.DBConnector()
 
+        inner_query = "SELECT COUNT(I.disk_id) FROM ( " \
+             "SELECT FID2.disk_id FROM Files_inside_Disks FID2 WHERE FID2.file_id = {file_id} " \
+             "intersect " \
+             "SELECT FID3.disk_id FROM Files_inside_Disks FID3 WHERE FID3.file_id = F.file_id " \
+             ") I"
+        outer_query = f"SELECT F.file_id FROM Files F WHERE ( {inner_query} ) " + ">= 0.5 * (SELECT COUNT(FID1.disk_id) FROM Files_inside_Disks FID1 WHERE FID1.file_id = {file_id}) AND NOT (F.file_id={file_id}) GROUP BY F.file_id"
+
+        query = sql.SQL(outer_query).format(file_id=sql.Literal(fileID))
+        rows_effected, result = conn.execute(query)
+
+        return [result[row]['file_id'] for row in range(rows_effected)][:10]
+
+    except Exception as e:
+        return []
+
+    finally:
+        conn.close()
+
+    return []
 
 
 
