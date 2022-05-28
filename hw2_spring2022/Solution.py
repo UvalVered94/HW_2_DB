@@ -66,6 +66,7 @@ def createTables():
     except Exception as e:
         print("WARNING!! ERROR RAISED IN VOID FUNCTION createTables!")
         print(e)
+        conn.rollback()
     else:
         conn.commit()
     finally:
@@ -695,7 +696,7 @@ def mostAvailableDisks() -> List[int]:
         return result
 
 
-'''def getCloseFiles(fileID: int) -> List[int]:
+def getCloseFiles(fileID: int) -> List[int]:
     conn = None
     answer =[]
     rows_affected, result = 0, ResultSet()
@@ -707,10 +708,9 @@ def mostAvailableDisks() -> List[int]:
              ") INTER"
         num_of_disks = "SELECT COUNT(F3.disk_id) " \
                        "FROM Files_inside_Disks F3 " \
-                       "WHERE F3.file_id = {file_id}) AND NOT (F.file_id={file_id}) " \
-                       "GROUP BY F.file_id"
-        conflict_query = sql.SQL("SELECT F.file_id FROM Files F WHERE (" + num_of_intersections + ") >= 0.5*  \
-        (" + num_of_disks).format(file_id=sql.Literal(fileID))
+                       "WHERE F3.file_id = {file_id} "
+        conflict_query = sql.SQL("SELECT F.file_id FROM Files F WHERE (" + num_of_intersections + ") >= 0.5*(" \
+                                 + num_of_disks + ") AND NOT (F.file_id={file_id}) ORDER BY F.file_id").format(file_id=sql.Literal(fileID))
         rows_affected, result = conn.execute(conflict_query)
         for file in range(rows_affected):
             answer.append(result[file]["file_id"])
@@ -722,32 +722,6 @@ def mostAvailableDisks() -> List[int]:
         if conn is not None:
             conn.close()
         return answer
-'''
-def getCloseFiles(fileID: int) -> List[int]:
-    conn = None
-    try:
-        conn = Connector.DBConnector()
-
-        inner_query = "SELECT COUNT(I.disk_id) FROM ( " \
-             "SELECT FID2.disk_id FROM Files_inside_Disks FID2 WHERE FID2.file_id = {file_id} " \
-             "intersect " \
-             "SELECT FID3.disk_id FROM Files_inside_Disks FID3 WHERE FID3.file_id = F.file_id " \
-             ") I"
-        outer_query = f"SELECT F.file_id FROM Files F WHERE ( {inner_query} ) " + ">= 0.5 * (SELECT COUNT(FID1.disk_id) FROM Files_inside_Disks FID1 WHERE FID1.file_id = {file_id}) AND NOT (F.file_id={file_id}) GROUP BY F.file_id"
-
-        query = sql.SQL(outer_query).format(file_id=sql.Literal(fileID))
-        rows_effected, result = conn.execute(query)
-
-        return [result[row]['file_id'] for row in range(rows_effected)][:10]
-
-    except Exception as e:
-        return []
-
-    finally:
-        conn.close()
-
-    return []
-
 
 
 def try_get_cost():
@@ -820,11 +794,11 @@ if __name__ == '__main__':
         print("returned ram size is: ", returned_ram.getSize())
         deleteRAM(1234222)
     if road == 3:
-        new_disk0 = Disk(0000, "Foxconn", 200, 1000, 1)
+        new_disk4 = Disk(4444, "Foxconn", 200, 1000, 1)
         new_disk1 = Disk(1111, "WD", 350, 5500, 10)
         new_disk2 = Disk(2222, "Kingstone", 350, 6000, 10)
         new_disk3 = Disk(3333, "Apple", 350, 1400, 10)
-        new_file0 = File(000, 'JPEG', 1)
+        new_file6 = File(666, 'JPEG', 1)
         new_file1 = File(111, 'JPEG', 1)
         new_file2 = File(222, 'PNG', 1)
         new_file3 = File(333, 'XLC', 1)
@@ -833,7 +807,7 @@ if __name__ == '__main__':
         new_ram0 = RAM(1234, 'WAISMAN', 1000)
         new_ram1 = RAM(2345, 'WAISMAN', 1000)
         new_ram2 = RAM(3456, 'WAISMAN', 1000)
-        addDiskAndFile(new_disk0, new_file0)
+        addDiskAndFile(new_disk4, new_file6)
         addDiskAndFile(new_disk1, new_file2)
         addDisk(new_disk2)
         addDisk(new_disk3)
@@ -841,17 +815,17 @@ if __name__ == '__main__':
         addFile(new_file3)
         addFile(new_file4)
         addFile(new_file5)
-        addFileToDisk(new_file0, 0000)
-        addFileToDisk(new_file0, 1111)
-        addFileToDisk(new_file0, 2222)
-        addFileToDisk(new_file0, 3333)
-        addFileToDisk(new_file1, 0000)
+        addFileToDisk(new_file6, 4444)
+        addFileToDisk(new_file6, 1111)
+        addFileToDisk(new_file6, 2222)
+        addFileToDisk(new_file6, 3333)
+        addFileToDisk(new_file1, 4444)
         addFileToDisk(new_file1, 1111)
         addFileToDisk(new_file1, 2222)
-        addFileToDisk(new_file2, 0000)
+        addFileToDisk(new_file2, 4444)
         addFileToDisk(new_file2, 1111)
         addFileToDisk(new_file3, 3333)
-        print(getCloseFiles(000))
+        print(getCloseFiles(666))
     if road == 4:
         new_ram0 = RAM(31259, "Samsung", 16096)
         addRAM(new_ram0)
