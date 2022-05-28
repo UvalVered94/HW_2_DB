@@ -1,0 +1,78 @@
+======================================================================
+FAIL: test_add_and_remove_file_from_disk (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 287, in test_add_and_remove_file_from_disk
+    self.assertEqual(Status.BAD_PARAMS, Solution.addFileToDisk(File(2, "MP3", 6), 1), "No space")
+AssertionError: <Status.BAD_PARAMS: 4> != <Status.NOT_EXISTS: 1> : No space
+
+======================================================================
+FAIL: test_averageFileSizeOnDisk (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 411, in test_averageFileSizeOnDisk
+    self.assertEqual(2.5, Solution.averageFileSizeOnDisk(1), "Should work")
+AssertionError: 2.5 != 2 : Should work
+
+======================================================================
+FAIL: test_getCloseFiles (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 979, in test_getCloseFiles
+    self.assertListEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11], Solution.getCloseFiles(1), "Should work")
+AssertionError: Lists differ: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] != [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+Second list contains 1 additional elements.
+First extra element 10:
+12
+
+- [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
++ [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+?                                ++++
+ : Should work
+
+======================================================================
+FAIL: test_getConflictingDisks (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 875, in test_getConflictingDisks
+    self.assertEqual(Status.BAD_PARAMS, Solution.addFileToDisk(File(1, "MP3", 2), 4), "No space")
+AssertionError: <Status.BAD_PARAMS: 4> != <Status.NOT_EXISTS: 1> : No space
+
+======================================================================
+FAIL: test_getCostForType (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 620, in test_getCostForType
+    self.assertEqual(Status.BAD_PARAMS, Solution.addFileToDisk(File(10, "MP3", 100), 1), "No space")
+AssertionError: <Status.BAD_PARAMS: 4> != <Status.NOT_EXISTS: 1> : No space
+
+======================================================================
+FAIL: test_isCompanyExclusive (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 798, in test_isCompanyExclusive
+    self.assertEqual(True, Solution.isCompanyExclusive(1), "Should work")
+AssertionError: True != False : Should work
+
+======================================================================
+FAIL: test_mostAvailableDisks (__main__.Test)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 904, in test_mostAvailableDisks
+    self.assertListEqual([1], Solution.mostAvailableDisks(), "Should work")
+AssertionError: Lists differ: [1] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+1
+
+- [1]
+?  -
+
++ [] : Should work
+
+----------------------------------------------------------------------
+Ran 15 tests in 39.570s
+
+FAILED (failures=7)

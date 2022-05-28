@@ -1,7 +1,7 @@
 import unittest
 import Solution
 from Utility.Status import Status
-from Tests.abstractTest import AbstractTest
+from abstractTest import AbstractTest
 from Business.File import File
 from Business.RAM import RAM
 from Business.Disk import Disk

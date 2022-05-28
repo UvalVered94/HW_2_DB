@@ -64,8 +64,6 @@ def createTables():
                      "COMMIT;")
 
     except Exception as e:
-        print("WARNING!! ERROR RAISED IN VOID FUNCTION createTables!")
-        print(e)
         conn.rollback()
     else:
         conn.commit()
@@ -79,9 +77,9 @@ def clearTables():
     conn = None
     try:
         conn = Connector.DBConnector()
-        tables_to_clear = ["Files", "Disks", "Rams", "Files_inside_Disks", "Rams_inside_Disks"]
+        tables_to_clear = ["Files", "Disks", "Rams"] #, "Files_inside_Disks", "Rams_inside_Disks"]
         for table in tables_to_clear:
-            conn.execute("TRUNCATE TABLE " + table)
+            conn.execute("TRUNCATE TABLE " + table + " CASCADE")
     except Exception as e:
         print("WARNING!! ERROR RAISED IN VOID FUNCTION clearTables!")
         print(e)
@@ -177,7 +175,7 @@ def deleteFile(file: File) -> Status:
         .format(id_of_file=sql.Literal(file.getFileID()))
         rows_affected, _ = conn.execute(delete_file_query)
         if rows_affected == 0:
-            status = Status.NOT_EXISTS
+            status = Status.OK
     except DatabaseException.ConnectionInvalid:
         status = Status.ERROR
     except DatabaseException.NOT_NULL_VIOLATION:
@@ -241,8 +239,13 @@ def getDiskByID(diskID: int) -> Disk:
     try:
         rows_affected, result = 0, ResultSet()
         conn = Connector.DBConnector()
-        get_disk_query = sql.SQL("SELECT * FROM Disks WHERE disk_id = {id_of_file}") \
-            .format(id_of_file=sql.Literal(diskID))
+        get_disk_query = sql.SQL\
+            (" \
+            SELECT * FROM \
+                ((SELECT D.disk_id, D.manufacturing_company, D.speed, D.cost_per_byte FROM Disks D WHERE disk_id = {disk_id}) AA \
+                CROSS JOIN \
+                (SELECT free_space from FilesNDisks_info WHERE disk_id = {disk_id}) BB )\
+            DISK_INFO").format(disk_id=sql.Literal(diskID))
         rows_affected, result = conn.execute(get_disk_query)
         # the rows effected var is the number of rows received by the SELECT func
         if rows_affected != 0:
@@ -250,7 +253,7 @@ def getDiskByID(diskID: int) -> Disk:
                         result[0]["free_space"], result[0]["cost_per_byte"])
     except Exception as e:
         print("WARNING! CATCHING ANY EXCEPTION TYPE IN getDiskByID!")
-        status = Status.ERROR
+        print(str(e))
     else:
         conn.commit()
     finally:
@@ -327,7 +330,7 @@ def addRAM(ram: RAM) -> Status:
 
 def getRAMByID(ramID: int) -> RAM:
     conn = None
-    ram = RAM.BadRAM()
+    ram = RAM.badRAM()
     try:
         rows_affected, result = 0, ResultSet()
         conn = Connector.DBConnector()
@@ -388,8 +391,10 @@ def addDiskAndFile(disk: Disk, file: File) -> Status:
         rows_affected, _ = conn.execute(add_diskNfile_query)
     except DatabaseException.UNIQUE_VIOLATION:
         status = Status.ALREADY_EXISTS
+        conn.rollback()
     except (DatabaseException.ConnectionInvalid, DatabaseException.UNKNOWN_ERROR, Exception):
         status = Status.ERROR
+        conn.rollback()
     else:
         conn.commit()
     finally:
@@ -411,8 +416,8 @@ def addFileToDisk(file: File, diskID: int) -> Status:
            disk_id=sql.Literal(diskID)
         )
         rows_affected, _ = conn.execute(add_file_to_disk_query)
-        if rows_affected == 0:
-            status = Status.BAD_PARAMS
+        '''if rows_affected == 0:
+            status = Status.NOT_EXISTS'''
     except (DatabaseException.ConnectionInvalid, DatabaseException.UNKNOWN_ERROR):
         status = Status.ERROR
     except DatabaseException.UNIQUE_VIOLATION:
@@ -580,7 +585,7 @@ def getFilesCanBeAddedToDisk(diskID: int) -> List[int]:
         can_add_query = sql.SQL("SELECT file_id FROM Files F WHERE size_needed <= (SELECT free_space FROM FilesNDisks_info "
          "WHERE disk_id = {disk_id}) "
          "ORDER BY file_id " 
-         "ASC LIMIT 5").format(disk_id=sql.Literal(diskID))
+         "DESC LIMIT 5").format(disk_id=sql.Literal(diskID))
         rows_affected, result = conn.execute(can_add_query)
         if rows_affected != 0: # the list should not be empty
             for file in range(rows_affected):
@@ -621,7 +626,7 @@ def getFilesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
             conn.close()
         return answer
 
-# TODO: check what happens if there is no such disk, if disk is empty
+# TODO: check what happens if there is no such disk, if disk has no RAM
 def isCompanyExclusive(diskID: int) -> bool:
     result = False
     conn = None
@@ -630,11 +635,12 @@ def isCompanyExclusive(diskID: int) -> bool:
         exclusive_query = sql.SQL("\
         SELECT ram_result FROM \
         ( \
-            SELECT COALESCE(COUNT(disk_id), 0) AS ram_result FROM DisksNRams_info \
+            SELECT COUNT(*) AS ram_result FROM DisksNRams_info \
             WHERE \
                 disk_id = {disk_id} and \
-                entire_disk_ram = (SELECT SUM(ram_size) FROM Rams WHERE company = (SELECT manufacturing_company FROM Disks WHERE disk_id = {disk_id})) \
-        ) RAM_RESULT").format(disk_id=sql.Literal(diskID))
+                entire_disk_ram = (SELECT COALESCE(SUM(ram_size),0) FROM Rams WHERE company = (SELECT manufacturing_company FROM Disks WHERE disk_id = {disk_id})) \
+        ) \
+        RAM_RESULT").format(disk_id=sql.Literal(diskID))
         rows_affected, query_result = conn.execute(exclusive_query)
         if rows_affected != 0:
             if int(query_result[0]["ram_result"]) == 1:
@@ -724,45 +730,18 @@ def getCloseFiles(fileID: int) -> List[int]:
         return answer
 
 
-def try_get_cost():
+def lane_six():
     new_disk0 = Disk(3, "Foxcon", 50, 3, 1)
-    new_disk1 = Disk(1, "Foxcon", 100, 2, 1)
-    new_disk2 = Disk(10, "Foxcon", 500, 1, 1)
-    new_disk3 = Disk(7, "Foxcon", 300, 1, 1)
-    new_disk4 = Disk(8, "Foxcon", 300, 1, 1)
-    addDisk(new_disk0)
-    addDisk(new_disk1)
-    addDisk(new_disk2)
-    addDisk(new_disk3)
-    addDisk(new_disk4)
-    for i in range(5):
-        new_file0 = File(1 + i, 'JPEG', 1)
-        addFile(new_file0)
-    new_file1 = File(7, 'JPEG', 2)
-    addFile(new_file1)
-    new_file2 = File(8, 'JPEG', 3)
-    addFile(new_file2)
-    mostAvailableDisks()
-
-def test_exclusive_disk():
-    print("hello")
-    new_disk0 = Disk(78, "samsung", 200, 2056, 2)
-    addDisk(new_disk0)
-    new_ram1 = RAM(10, "samsung", 1024)
-    new_ram2 = RAM(20, "samsung", 1024)
-    new_ram3 = RAM(30, "samsung", 1024)
-    addRAM(new_ram1)
-    addRAM(new_ram2)
-    addRAM(new_ram3)
-    addRAMToDisk(10, 78)
-    addRAMToDisk(20, 78)
-    addRAMToDisk(30, 78)
-    print(isCompanyExclusive(78))
+    new_ram = RAM(1, "Foxcon", 1)
+    print("add disk: " + str(addDisk(new_disk0)))
+    print("add ram: " + str(addRAM(new_ram)))
+    print("add ram to disk: " + str(addRAMToDisk(1,3)))
+    print("isExclusive: " + str(isCompanyExclusive(3)))
 
 if __name__ == '__main__':
     dropTables()
     createTables()
-    road = 3 # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
+    road = 6 # put 0 for Files table testing, 1 for Disks, 2 for Rams, 3 for disk & file
     if road == 0:
         new_file0 = File(123456, 'JPEG', 1096)
         print(new_file0.getFileID())
@@ -794,38 +773,14 @@ if __name__ == '__main__':
         print("returned ram size is: ", returned_ram.getSize())
         deleteRAM(1234222)
     if road == 3:
-        new_disk4 = Disk(4444, "Foxconn", 200, 1000, 1)
         new_disk1 = Disk(1111, "WD", 350, 5500, 10)
-        new_disk2 = Disk(2222, "Kingstone", 350, 6000, 10)
-        new_disk3 = Disk(3333, "Apple", 350, 1400, 10)
-        new_file6 = File(666, 'JPEG', 1)
-        new_file1 = File(111, 'JPEG', 1)
-        new_file2 = File(222, 'PNG', 1)
-        new_file3 = File(333, 'XLC', 1)
-        new_file4 = File(444, 'SML', 1)
-        new_file5 = File(555, 'SML', 1)
-        new_ram0 = RAM(1234, 'WAISMAN', 1000)
-        new_ram1 = RAM(2345, 'WAISMAN', 1000)
-        new_ram2 = RAM(3456, 'WAISMAN', 1000)
-        addDiskAndFile(new_disk4, new_file6)
-        addDiskAndFile(new_disk1, new_file2)
-        addDisk(new_disk2)
-        addDisk(new_disk3)
-        addFile(new_file1)
-        addFile(new_file3)
-        addFile(new_file4)
-        addFile(new_file5)
-        addFileToDisk(new_file6, 4444)
-        addFileToDisk(new_file6, 1111)
-        addFileToDisk(new_file6, 2222)
-        addFileToDisk(new_file6, 3333)
-        addFileToDisk(new_file1, 4444)
+        new_file1 = File(111, 'JPEG', 1000)
+        addDiskAndFile(new_disk1, new_file1)
+        disk = getDiskByID(1111)
+        print(disk.getFreeSpace())
         addFileToDisk(new_file1, 1111)
-        addFileToDisk(new_file1, 2222)
-        addFileToDisk(new_file2, 4444)
-        addFileToDisk(new_file2, 1111)
-        addFileToDisk(new_file3, 3333)
-        print(getCloseFiles(666))
+        disk = getDiskByID(1111)
+        print(disk.getFreeSpace())
     if road == 4:
         new_ram0 = RAM(31259, "Samsung", 16096)
         addRAM(new_ram0)
@@ -838,6 +793,4 @@ if __name__ == '__main__':
     if road == 5:
         print("Im game")
     if road == 6:
-        try_get_cost()
-    if road == 7:
-        test_exclusive_disk()
+        lane_six()
