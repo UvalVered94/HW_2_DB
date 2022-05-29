@@ -1,20 +1,4 @@
 ======================================================================
-FAIL: test_add_and_remove_file_from_disk (__main__.Test)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 303, in test_add_and_remove_file_from_disk
-    self.assertEqual(disk.getFreeSpace(), 5, "Should work")
-AssertionError: 26 != 5 : Should work
-
-======================================================================
-FAIL: test_averageFileSizeOnDisk (__main__.Test)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 411, in test_averageFileSizeOnDisk
-    self.assertEqual(2.5, Solution.averageFileSizeOnDisk(1), "Should work")
-AssertionError: 2.5 != 2 : Should work
-
-======================================================================
 FAIL: test_getCloseFiles (__main__.Test)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
@@ -35,17 +19,22 @@ First extra element 10:
 FAIL: test_getConflictingDisks (__main__.Test)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 881, in test_getConflictingDisks
-    self.assertEqual(Status.OK, Solution.addFileToDisk(File(2, "MP3", 1), 1), "Should work")
-AssertionError: <Status.OK: 0> != <Status.BAD_PARAMS: 4> : Should work
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 882, in test_getConflictingDisks
+    self.assertListEqual([1, 2, 3, 4], Solution.getConflictingDisks(), "4 conflicting with 1")
+AssertionError: Lists differ: [1, 2, 3, 4] != [1, 1, 2, 3, 4]
 
-======================================================================
-FAIL: test_getFilesCanBeAddedToDisk (__main__.Test)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 710, in test_getFilesCanBeAddedToDisk
-    self.assertEqual(Status.OK, Solution.addFileToDisk(File(10, "MP3", 5), 2), "Should work")
-AssertionError: <Status.OK: 0> != <Status.BAD_PARAMS: 4> : Should work
+First differing element 1:
+2
+1
+
+Second list contains 1 additional elements.
+First extra element 4:
+4
+
+- [1, 2, 3, 4]
++ [1, 1, 2, 3, 4]
+?     +++
+ : 4 conflicting with 1
 
 ======================================================================
 FAIL: test_mostAvailableDisks (__main__.Test)
