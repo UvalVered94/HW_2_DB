@@ -2,9 +2,9 @@
 FAIL: test_add_and_remove_file_from_disk (__main__.Test)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 287, in test_add_and_remove_file_from_disk
-    self.assertEqual(Status.BAD_PARAMS, Solution.addFileToDisk(File(2, "MP3", 6), 1), "No space")
-AssertionError: <Status.BAD_PARAMS: 4> != <Status.NOT_EXISTS: 1> : No space
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 303, in test_add_and_remove_file_from_disk
+    self.assertEqual(disk.getFreeSpace(), 5, "Should work")
+AssertionError: 26 != 5 : Should work
 
 ======================================================================
 FAIL: test_averageFileSizeOnDisk (__main__.Test)
@@ -35,25 +35,17 @@ First extra element 10:
 FAIL: test_getConflictingDisks (__main__.Test)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 875, in test_getConflictingDisks
-    self.assertEqual(Status.BAD_PARAMS, Solution.addFileToDisk(File(1, "MP3", 2), 4), "No space")
-AssertionError: <Status.BAD_PARAMS: 4> != <Status.NOT_EXISTS: 1> : No space
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 881, in test_getConflictingDisks
+    self.assertEqual(Status.OK, Solution.addFileToDisk(File(2, "MP3", 1), 1), "Should work")
+AssertionError: <Status.OK: 0> != <Status.BAD_PARAMS: 4> : Should work
 
 ======================================================================
-FAIL: test_getCostForType (__main__.Test)
+FAIL: test_getFilesCanBeAddedToDisk (__main__.Test)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 620, in test_getCostForType
-    self.assertEqual(Status.BAD_PARAMS, Solution.addFileToDisk(File(10, "MP3", 100), 1), "No space")
-AssertionError: <Status.BAD_PARAMS: 4> != <Status.NOT_EXISTS: 1> : No space
-
-======================================================================
-FAIL: test_isCompanyExclusive (__main__.Test)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 798, in test_isCompanyExclusive
-    self.assertEqual(True, Solution.isCompanyExclusive(1), "Should work")
-AssertionError: True != False : Should work
+  File "C:\studystuff\db\HW_2_DB\hw2_spring2022\ComplexTest.py", line 710, in test_getFilesCanBeAddedToDisk
+    self.assertEqual(Status.OK, Solution.addFileToDisk(File(10, "MP3", 5), 2), "Should work")
+AssertionError: <Status.OK: 0> != <Status.BAD_PARAMS: 4> : Should work
 
 ======================================================================
 FAIL: test_mostAvailableDisks (__main__.Test)
@@ -71,8 +63,3 @@ First extra element 0:
 ?  -
 
 + [] : Should work
-
-----------------------------------------------------------------------
-Ran 15 tests in 39.570s
-
-FAILED (failures=7)

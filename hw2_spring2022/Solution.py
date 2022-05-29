@@ -55,7 +55,7 @@ def createTables():
                          " UNION"
                          " SELECT disk_id, 0 FROM Disks D WHERE disk_id NOT IN (SELECT disk_id from Rams_inside_Disks);"
                     "CREATE VIEW FilesNDisks_info AS  "
-                         "SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied, (SELECT COALESCE(SUM(free_space),0) FROM Disks WHERE disk_id = FiD.disk_id GROUP BY disk_id) - (COALESCE(SUM(F.size_needed),0)) as free_space, COALESCE(COUNT(FiD.file_id),0) as num_of_files"
+                         "SELECT disk_id, COALESCE(SUM(F.size_needed),0) as size_occupied, (SELECT free_space FROM Disks WHERE disk_id = FiD.disk_id) as free_space, COALESCE(COUNT(FiD.file_id),0) as num_of_files"
                          " FROM Files F INNER JOIN Files_inside_Disks FiD"
                          " ON FiD.file_id = F.file_id"
                          " GROUP BY disk_id "
@@ -72,7 +72,7 @@ def createTables():
             conn.close()
         return
 
-
+# TODO: make it into 1 transaction
 def clearTables():
     conn = None
     try:
@@ -90,6 +90,7 @@ def clearTables():
             conn.close()
         return
 
+# TODO: make it into 1 transaction
 def dropTables():
     conn = None
     try:
@@ -173,9 +174,7 @@ def deleteFile(file: File) -> Status:
         conn = Connector.DBConnector()
         delete_file_query = sql.SQL("DELETE FROM Files WHERE file_id = {id_of_file}") \
         .format(id_of_file=sql.Literal(file.getFileID()))
-        rows_affected, _ = conn.execute(delete_file_query)
-        if rows_affected == 0:
-            status = Status.OK
+        _, _ = conn.execute(delete_file_query)
     except DatabaseException.ConnectionInvalid:
         status = Status.ERROR
     except DatabaseException.NOT_NULL_VIOLATION:
@@ -408,16 +407,12 @@ def addFileToDisk(file: File, diskID: int) -> Status:
     status = Status.OK
     try:
         conn = Connector.DBConnector()
-        add_file_to_disk_query = sql.SQL("INSERT INTO Files_inside_Disks("
-        "SELECT FD.file_id, FD.disk_id FROM (Files CROSS JOIN Disks) FD WHERE FD.file_id = {file_id} "
-        "and FD.disk_id = {disk_id} and FD.size_needed <= "
-        "(SELECT free_space FROM FilesNDisks_info FnD WHERE FnD.disk_id = {disk_id}))").format(
-           file_id=sql.Literal(file.getFileID()),
-           disk_id=sql.Literal(diskID)
-        )
-        rows_affected, _ = conn.execute(add_file_to_disk_query)
-        '''if rows_affected == 0:
-            status = Status.NOT_EXISTS'''
+        add_file_to_disk_query = sql.SQL("BEGIN; \
+                                                INSERT INTO Files_inside_Disks (file_id, disk_id) VALUES({file_id}, {disk_id}); \
+                                                UPDATE Disks SET free_space = free_space - {size_needed}; \
+                                        COMMIT;").format(file_id=sql.Literal(file.getFileID()), disk_id=sql.Literal(diskID), size_needed=sql.Literal(file.getSize()))
+        conn.execute(add_file_to_disk_query)
+        # cannot use rows_affected, query_result from a transaction
     except (DatabaseException.ConnectionInvalid, DatabaseException.UNKNOWN_ERROR):
         status = Status.ERROR
     except DatabaseException.UNIQUE_VIOLATION:
@@ -431,6 +426,8 @@ def addFileToDisk(file: File, diskID: int) -> Status:
     else:
         conn.commit()
     finally:
+        if status != Status.OK:
+            conn.rollback()
         if conn is not None:
             conn.close()
         return status
@@ -441,10 +438,11 @@ def removeFileFromDisk(file: File, diskID: int) -> Status:
     status = Status.OK
     try:
         conn = Connector.DBConnector()
-        remove_file_from_disk_query = sql.SQL(
-            "DELETE FROM Files_inside_Disks WHERE file_id = {file_id} and disk_id = {disk_id}").format(
-            file_id=sql.Literal(file.getFileID()),
-            disk_id=sql.Literal(diskID))
+        remove_file_from_disk_query = sql.SQL("BEGIN; \
+                                                DELETE FROM Files_inside_Disks WHERE file_id = {file_id} and disk_id = {disk_id}; \
+                                                UPDATE Disks SET free_space = free_space + {size_needed}; \
+                                        COMMIT;").format(file_id=sql.Literal(file.getFileID()), disk_id=sql.Literal(diskID), size_needed=sql.Literal(file.getSize()))
+                                        
         rows_affected, _ = conn.execute(remove_file_from_disk_query)
     except Exception as e:
         print(e)
@@ -455,7 +453,6 @@ def removeFileFromDisk(file: File, diskID: int) -> Status:
         if conn is not None:
             conn.close()
         return status
-
 
 
 def addRAMToDisk(ramID: int, diskID: int) -> Status:
@@ -507,7 +504,8 @@ def removeRAMFromDisk(ramID: int, diskID: int) -> Status:
 
 def averageFileSizeOnDisk(diskID: int) -> float:
     conn = None
-    rows_affected, result = 0, ResultSet()
+    result = ResultSet()
+    rows_affected = 0
     avg_result = 0
     try:
         conn = Connector.DBConnector()
@@ -638,7 +636,11 @@ def isCompanyExclusive(diskID: int) -> bool:
             SELECT COUNT(*) AS ram_result FROM DisksNRams_info \
             WHERE \
                 disk_id = {disk_id} and \
-                entire_disk_ram = (SELECT COALESCE(SUM(ram_size),0) FROM Rams WHERE company = (SELECT manufacturing_company FROM Disks WHERE disk_id = {disk_id})) \
+                entire_disk_ram =   (\
+                                        SELECT COALESCE(SUM(ram_size),0) FROM Rams WHERE \
+                                                                                company = (SELECT manufacturing_company FROM Disks WHERE disk_id = {disk_id})\
+                                                                                and ram_id IN (SELECT ram_id FROM Rams_inside_Disks WHERE disk_id = {disk_id})\
+                                    ) \
         ) \
         RAM_RESULT").format(disk_id=sql.Literal(diskID))
         rows_affected, query_result = conn.execute(exclusive_query)
@@ -653,7 +655,6 @@ def isCompanyExclusive(diskID: int) -> bool:
         if conn is not None:
             conn.close()
         return result
-
 
 def getConflictingDisks() -> List[int]:
     conn = None
@@ -674,7 +675,6 @@ def getConflictingDisks() -> List[int]:
         if conn is not None:
             conn.close()
         return answer
-    
     
 def mostAvailableDisks() -> List[int]:
     conn = None
@@ -700,7 +700,6 @@ def mostAvailableDisks() -> List[int]:
         if conn is not None:
             conn.close()
         return result
-
 
 def getCloseFiles(fileID: int) -> List[int]:
     conn = None
@@ -731,12 +730,13 @@ def getCloseFiles(fileID: int) -> List[int]:
 
 
 def lane_six():
-    new_disk0 = Disk(3, "Foxcon", 50, 3, 1)
-    new_ram = RAM(1, "Foxcon", 1)
+    new_disk0 = Disk(3, "Foxcon", 50, 10000, 10000)
+    new_file = File(1,"jpeg",1000)
     print("add disk: " + str(addDisk(new_disk0)))
-    print("add ram: " + str(addRAM(new_ram)))
-    print("add ram to disk: " + str(addRAMToDisk(1,3)))
-    print("isExclusive: " + str(isCompanyExclusive(3)))
+    print("add file: " + str(addFile(new_file)))
+    print("add file to disk: " + str(addFileToDisk(new_file, 3)))
+    print("remove file: " + str(deleteFile(new_file)))
+    #print("isExclusive: " + str(isCompanyExclusive(3)))
 
 if __name__ == '__main__':
     dropTables()
