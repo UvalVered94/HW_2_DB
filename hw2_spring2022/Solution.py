@@ -136,7 +136,6 @@ def addFile(file: File) -> Status:
         status = Status.ERROR
     except Exception as e: # all other
         status = Status.ERROR
-        print("WARNING! CATCHING ANY EXCEPTION TYPE IN AddFile!")
     else:
         conn.commit()
     finally:
@@ -158,7 +157,7 @@ def getFileByID(fileID: int) -> File:
         if rows_affected != 0:
             file = File(result[0]["file_id"], result[0]["file_type"], result[0]["size_needed"])
     except Exception as e:
-        print("WARNING! CATCHING ANY EXCEPTION TYPE IN GetFileByID!")
+        pass
     else:
         conn.commit()
     finally:
@@ -190,7 +189,6 @@ def deleteFile(file: File) -> Status:
     except DatabaseException.UNKNOWN_ERROR:
         status = Status.ERROR
     except Exception as e:
-        print("WARNING! CATCHING ANY EXCEPTION TYPE IN DeleteFile!")
         status = Status.ERROR
     else:
         conn.commit()
@@ -226,7 +224,6 @@ def addDisk(disk: Disk) -> Status:
     except DatabaseException.UNKNOWN_ERROR:
         status = Status.ERROR
     except Exception as e:
-        print("WARNING! CATCHING ANY EXCEPTION TYPE IN AddDisk!")
         status = Status.ERROR
     else:
         conn.commit()
@@ -255,8 +252,7 @@ def getDiskByID(diskID: int) -> Disk:
             disk = Disk(result[0]["disk_id"], result[0]["manufacturing_company"], result[0]["speed"], \
                         result[0]["free_space"], result[0]["cost_per_byte"])
     except Exception as e:
-        print("WARNING! CATCHING ANY EXCEPTION TYPE IN getDiskByID!")
-        print(str(e))
+        pass
     else:
         conn.commit()
     finally:
@@ -288,7 +284,6 @@ def deleteDisk(diskID: int) -> Status:
     except DatabaseException.UNKNOWN_ERROR:
         status = Status.ERROR
     except Exception as e:
-        print("WARNING! CATCHING ANY TYPE OF EXCEPTION IN deleteDisk")
         status = Status.ERROR
     else:
         conn.commit()
@@ -321,7 +316,6 @@ def addRAM(ram: RAM) -> Status:
     except DatabaseException.UNKNOWN_ERROR:
         status = Status.ERROR
     except Exception as e:
-        print("WARNING! CATCHING ANY TYPE OF EXCEPTION IN deleteDisk")
         status = Status.ERROR
     else:
         conn.commit()
@@ -448,7 +442,6 @@ def removeFileFromDisk(file: File, diskID: int) -> Status:
                                             COMMIT;").format(file_id=sql.Literal(file.getFileID()), disk_id=sql.Literal(diskID), size_needed=sql.Literal(file.getSize()))         
         rows_affected, result = conn.execute(remove_file_from_disk_query)
     except Exception as e:
-        print(e)
         status = Status.ERROR
     else:
         conn.commit()
@@ -476,7 +469,6 @@ def addRAMToDisk(ramID: int, diskID: int) -> Status:
     except DatabaseException.UNIQUE_VIOLATION:
         status = Status.ALREADY_EXISTS
     except Exception as e:
-        print(e)
         status = Status.ERROR
     else:
         conn.commit()
@@ -497,7 +489,6 @@ def removeRAMFromDisk(ramID: int, diskID: int) -> Status:
         if rows_affected == 0:
             status = Status.NOT_EXISTS
     except Exception as e:
-        print(e)
         status = Status.ERROR
     else:
         conn.commit()
@@ -595,7 +586,6 @@ def getFilesCanBeAddedToDisk(diskID: int) -> List[int]:
             for file in range(rows_affected):
                 answer.append(result[file]["file_id"])
     except Exception as e:
-        print(e)
         pass    
     else:
         conn.commit()
@@ -621,7 +611,6 @@ def getFilesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
             for file in range(rows_affected):
                 answer.append(result[file]["file_id"])
     except Exception as e:
-        print(e)
         pass    
     else:
         conn.commit()
@@ -669,12 +658,12 @@ def getConflictingDisks() -> List[int]:
     try:
         conn = Connector.DBConnector()
         
-        conflict_query = sql.SQL("SELECT FiD.disk_id FROM Files_inside_Disks as FiD WHERE (SELECT COUNT(FD.disk_id) FROM Files_inside_Disks as FD WHERE FD.file_id = FiD.file_id) > 1 ORDER BY FiD.disk_id")
+        conflict_query = sql.SQL("SELECT DISTINCT FiD.disk_id FROM Files_inside_Disks as FiD WHERE (SELECT COUNT(FD.disk_id) FROM Files_inside_Disks as FD WHERE FD.file_id = FiD.file_id) > 1 ORDER BY FiD.disk_id")
         rows_affected, result = conn.execute(conflict_query)
         for disk in range(rows_affected):
             answer.append(result[disk]["disk_id"])
     except Exception as e:
-        print(e)
+        pass
     else:
         conn.commit()
     finally:
@@ -689,8 +678,10 @@ def mostAvailableDisks() -> List[int]:
         conn = Connector.DBConnector()
         most_disks_query = sql.SQL("\
         SELECT disk_id, speed, COUNT(*) AS files_possible FROM \
-        (SELECT disk_id FROM Files CROSS JOIN Disks WHERE Files.size_needed <= free_space) FFND \
+        (SELECT disk_id, speed FROM Files CROSS JOIN Disks WHERE Files.size_needed <= free_space) FFND \
         GROUP BY FFND.disk_id, speed \
+        UNION \
+        SELECT disk_id, speed, 0 FROM Disks WHERE disk_id NOT IN (SELECT disk_id FROM Files CROSS JOIN Disks WHERE Files.size_needed <= free_space) \
         ORDER BY files_possible DESC, speed DESC, disk_id ASC \
         LIMIT 5 \
         ")
@@ -699,7 +690,7 @@ def mostAvailableDisks() -> List[int]:
             for index in range(rows_affected):
                 result.append(query_result[index]["disk_id"])
     except Exception as e:
-        pass # nothing to do if there is an error, return an empty result
+        pass  # nothing to do if there is an error, return an empty result
     else:
         conn.commit()
     finally:
@@ -721,12 +712,12 @@ def getCloseFiles(fileID: int) -> List[int]:
                        "FROM Files_inside_Disks F3 " \
                        "WHERE F3.file_id = {file_id} "
         conflict_query = sql.SQL("SELECT F.file_id FROM Files F WHERE (" + num_of_intersections + ") >= 0.5*(" \
-                                 + num_of_disks + ") AND NOT (F.file_id={file_id}) ORDER BY F.file_id").format(file_id=sql.Literal(fileID))
+                                 + num_of_disks + ") AND NOT (F.file_id={file_id}) ORDER BY F.file_id LIMIT 10").format(file_id=sql.Literal(fileID))
         rows_affected, result = conn.execute(conflict_query)
         for file in range(rows_affected):
             answer.append(result[file]["file_id"])
     except Exception as e:
-        print(e)
+        pass
     else:
         conn.commit()
     finally:
@@ -736,15 +727,11 @@ def getCloseFiles(fileID: int) -> List[int]:
 
 
 def lane_six():
-    new_disk0 = Disk(3, "Foxcon", 50, 10000, 10000)
-    new_file0 = File(1,"jpeg",1)
-    new_file1 = File(2,"jpeg",2)
+    new_disk0 = Disk(3, "Foxcon", 1, 1, 1)
+    new_file0 = File(5000000000,"jpeg",100)
     print("add disk: " + str(addDisk(new_disk0)))
     print("add file: " + str(addFile(new_file0)))
-    print("add file: " + str(addFile(new_file1)))
-    print("add file to disk: " + str(addFileToDisk(new_file0, 3)))
-    print("add file to disk: " + str(addFileToDisk(new_file1, 3)))
-    print("AVERAGE: " + str(averageFileSizeOnDisk(3)))
+    print("RESULT: " + str(mostAvailableDisks()))
     #print("isExclusive: " + str(isCompanyExclusive(3)))
 
 if __name__ == '__main__':
