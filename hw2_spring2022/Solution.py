@@ -1,5 +1,3 @@
-from decimal import DivisionByZero
-from msilib.schema import RemoveFile
 from typing import List
 import Utility.DBConnector as Connector
 from Utility.Status import Status
@@ -10,8 +8,6 @@ from Business.Disk import Disk
 from Utility.DBConnector import ResultSet
 from psycopg2 import sql
 from psycopg2.errors import DivisionByZero
-
-from hw2_spring2022.Utility.DBConnector import DBConnector
 
 def createTables():
     conn = None
