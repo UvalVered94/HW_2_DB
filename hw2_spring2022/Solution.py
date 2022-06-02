@@ -64,7 +64,8 @@ def createTables():
                      "COMMIT;")
 
     except Exception as e:
-        conn.rollback()
+        if conn is not None:
+            conn.rollback()
     else:
         conn.commit()
     finally:
@@ -72,17 +73,19 @@ def createTables():
             conn.close()
         return
 
-# TODO: make it into 1 transaction
 def clearTables():
     conn = None
     try:
         conn = Connector.DBConnector()
-        tables_to_clear = ["Files", "Disks", "Rams"] #, "Files_inside_Disks", "Rams_inside_Disks"]
+        tables_to_clear = ["Files", "Disks", "Rams"] # no need to clear views as they are constructed from foreign keys
+        clear_query = "BEGIN;"
         for table in tables_to_clear:
-            conn.execute("TRUNCATE TABLE " + table + " CASCADE")
+            clear_query += " TRUNCATE TABLE " + table + " CASCADE;"
+        clear_query += " COMMIT;"
+        conn.execute(clear_query)
     except Exception as e:
-        print("WARNING!! ERROR RAISED IN VOID FUNCTION clearTables!")
-        print(e)
+        if conn is not None:
+            conn.rollback()
     else:
         conn.commit()
     finally:
@@ -90,20 +93,19 @@ def clearTables():
             conn.close()
         return
 
-# TODO: make it into 1 transaction
 def dropTables():
     conn = None
     try:
         conn = Connector.DBConnector()
         tables_to_drop = ["Files", "Disks", "Rams", "Files_inside_Disks", "Rams_inside_Disks"]
-        '''views_to_drop = [...]'''
-        '''for view in views_to_drop:
-            conn.execute("DROP VIEW IF EXISTS " + view " CASCADE")'''
+        drop_query = "BEGIN;"
         for table in tables_to_drop:
-            conn.execute("DROP TABLE IF EXISTS " + table + " CASCADE")
+            drop_query += " DROP TABLE IF EXISTS " + table + " CASCADE;"
+        drop_query += " COMMIT;"
+        conn.execute(drop_query)
     except Exception as e:
-        print("WARNING!! ERROR RAISED IN VOID FUNCTION dropTables!")
-        print(e)
+        if conn is not None:
+            conn.rollback()
     else:
         conn.commit()
     finally:
@@ -193,7 +195,7 @@ def deleteFile(file: File) -> Status:
     else:
         conn.commit()
     finally:
-        if status != Status.OK:
+        if status != Status.OK and conn is not None:
             conn.rollback()
         if conn is not None:
             conn.close()
@@ -239,13 +241,7 @@ def getDiskByID(diskID: int) -> Disk:
     try:
         rows_affected, result = 0, ResultSet()
         conn = Connector.DBConnector()
-        get_disk_query = sql.SQL\
-            (" \
-            SELECT * FROM \
-                ((SELECT D.disk_id, D.manufacturing_company, D.speed, D.cost_per_byte FROM Disks D WHERE disk_id = {disk_id}) AA \
-                CROSS JOIN \
-                (SELECT free_space from Disks WHERE disk_id = {disk_id}) BB )\
-            DISK_INFO").format(disk_id=sql.Literal(diskID))
+        get_disk_query = sql.SQL("SELECT * FROM Disks WHERE disk_id = {disk_id}").format(disk_id=sql.Literal(diskID))
         rows_affected, result = conn.execute(get_disk_query)
         # the rows effected var is the number of rows received by the SELECT func
         if rows_affected != 0:
@@ -393,7 +389,7 @@ def addDiskAndFile(disk: Disk, file: File) -> Status:
     else:
         conn.commit()
     finally:
-        if status != Status.OK:
+        if status != Status.OK and conn is not None:
             conn.rollback()
         if conn is not None:
             conn.close()
@@ -424,7 +420,7 @@ def addFileToDisk(file: File, diskID: int) -> Status:
     else:
         conn.commit()
     finally:
-        if status != Status.OK:
+        if status != Status.OK and conn is not None:
             conn.rollback()
         if conn is not None:
             conn.close()
@@ -446,7 +442,7 @@ def removeFileFromDisk(file: File, diskID: int) -> Status:
     else:
         conn.commit()
     finally:
-        if status != Status.OK:
+        if status != Status.OK and conn is not None:
             conn.rollback()
         if conn is not None:
             conn.close()
@@ -497,8 +493,6 @@ def removeRAMFromDisk(ramID: int, diskID: int) -> Status:
             conn.close()
         return status
 
-
-# TODO: make sure this syntax is legit in the context of homework
 def averageFileSizeOnDisk(diskID: int) -> float:
     conn = None
     result = ResultSet()
@@ -619,7 +613,6 @@ def getFilesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
             conn.close()
         return answer
 
-# TODO: check what happens if there is no such disk, if disk has no RAM
 def isCompanyExclusive(diskID: int) -> bool:
     result = False
     conn = None
